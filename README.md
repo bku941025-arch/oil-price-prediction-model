@@ -1,109 +1,119 @@
-# Canada Regular Gas Price Forecasting
+# GasPrix MTL — Montreal Gas Price Predictor
 
-A project to forecast the trend of **regular gasoline prices in Canada** using a small set of accessible inputs and data that can be automatically pulled from fixed online sources. The goal is to help students and other frequent drivers plan budgets and choose better refueling times.
+A machine learning web application that forecasts retail gasoline prices in Montreal up to 4 weeks ahead and helps users plan their monthly gas budget.
 
----
-
-## Motivation
-
-Gas prices can change significantly day-to-day and month-to-month. For students who commute or drive often, fuel is a major monthly expense. By forecasting upcoming regular gas price trends, we can:
-- make more accurate monthly budgets,
-- anticipate price increases/decreases,
-- decide *when* to refuel based on expected movement.
-
-To reduce noise and improve consistency, we limit the scope of data and model validity to **Canada**.
+**Live app:** [gas-price-mtl.onrender.com](https://gas-price-mtl.onrender.com)
 
 ---
 
-## What We Predict
+## Overview
 
-- **Target:** Regular gasoline price (Canadian retail / average price, region-based when possible)
-- **Output:** Forecasted price trend over a future time window (e.g., next days/weeks/months depending on data frequency)
+GasPrix MTL uses Ridge Regression and LightGBM trained on 10 years of daily Montreal retail gas prices (2016–2026) alongside WTI crude oil and CAD/USD exchange rate data. The app provides:
 
----
-
-## Key Factors Considered
-
-Regular gasoline prices are influenced by many variables, including:
-- international crude oil prices,
-- regional / national temperature patterns and extreme weather,
-- global supply & demand,
-- exchange rates,
-- taxes,
-- geopolitical events.
-
-Many difficult-to-quantify social and geopolitical effects are reflected in crude prices, so we focus on measurable signals that capture major drivers:
-
-1. **WTI Crude Oil Price (benchmark)**
-   - Used as a reference standard for crude oil pricing in North America
-2. **CAD–USD Exchange Rate**
-   - Because oil is generally priced in USD, exchange rate shifts affect Canadian fuel costs
-3. **Regional Temperature / Extreme Weather**
-   - Captures seasonal demand changes and disruptions
-4. **Regional Fuel Taxes**
-   - Taxes differ by Canadian region but are relatively stable long-term; we model them with a mergeable table
+- **4-week price range forecast** with widening confidence bands
+- **Best day to fill up** recommendation for the coming week
+- **Monthly budget estimator** based on last month's gas spend
+- **Bilingual interface** (English / French)
+- **Daily automated retraining** via GitHub Actions
 
 ---
 
 ## Data Sources
 
-### 1) WTI Crude Oil Prices (FRED)
-- Dataset: `MCOILWTICO`
-- Source: Federal Reserve Bank of St. Louis (FRED)
-- Link: https://fred.stlouisfed.org/series/MCOILWTICO
-
-### 2) Canadian Average Gasoline Prices (Statistics Canada)
-- Source: Statistics Canada
-- Notes: Used for Canada-wide or region-level average gas price series (depending on the table we select)
-
-### 3) CAD to USD Exchange Rate (FRED)
-- Dataset: `EXCAUS` (Canadian Dollars to U.S. Dollar Spot Exchange Rate)
-- Source: Federal Reserve Bank of St. Louis (FRED)
-- Link (FRED series page): https://fred.stlouisfed.org/series/EXCAUS
-
-### 4) Regional Fuel Tax Table (Self-made)
-- A manually created table with regional fuel taxes
-- Designed to be stable and easy to merge with other datasets
-
-### 5) Extreme Weather Events (Optional / Self-made)
-- A low-frequency event table derived from available weather data
-- Included as indicators (e.g., binary flags) because extreme events are rare but impactful
+| Source | Series | Description |
+|---|---|---|
+| [Kalibrate](https://charting.kalibrate.com) | — | Montreal daily retail gas prices (¢/L, taxes included) |
+| [FRED](https://fred.stlouisfed.org/series/DCOILWTICO) | DCOILWTICO | WTI crude oil spot price (USD/barrel) |
+| [FRED](https://fred.stlouisfed.org/series/DEXCAUS) | DEXCAUS | CAD/USD exchange rate |
 
 ---
 
-## Approach (High Level)
+## Models
 
-1. **Collect & update data**
-   - Pull WTI and exchange rate series from FRED
-   - Pull Canadian gas price series from Statistics Canada
-   - Merge with tax and weather/event tables
+| Model | MAE | RMSE | Directional Accuracy |
+|---|---|---|---|
+| Persistence baseline | 1.924 ¢/L | 2.741 ¢/L | — |
+| **Ridge Regression** | **1.760 ¢/L** | **2.438 ¢/L** | 60.8% |
+| XGBoost | 1.864 ¢/L | 2.668 ¢/L | 61.4% |
+| LightGBM | 1.895 ¢/L | 2.782 ¢/L | **63.8%** |
 
-2. **Clean & align time series**
-   - Normalize units and timestamps (daily vs monthly, etc.)
-   - Handle missing values and outliers
+- **Ridge** wins on MAE (most accurate price level)
+- **LightGBM** wins on directional accuracy (best up/down signal)
+- The ensemble (average of both) powers the forecast
 
-3. **Feature engineering**
-   - Lag features (e.g., oil price lagged by 1–4 weeks)
-   - Rolling averages / volatility measures
-   - Seasonal indicators (month, week-of-year)
-   - Weather and extreme-event flags
-
-4. **Modeling**
-   - Start with interpretable baselines (linear regression)
-   - Extend to time-series models (ARIMAX / SARIMAX)
-   - Consider ML models (Random Forest / XGBoost) if beneficial
-
-5. **Evaluation**
-   - Use time-based splits (train/validation/test)
-   - Report metrics like MAE/RMSE and trend accuracy
-   - Validate by region where data supports it
+**Train / test split:** Aug 2016 – Dec 2023 (train) | Jan 2024 – present (test)
 
 ---
 
-## Project Scope & Limitations
+## Features
 
-- **Scope:** Canada only (data + output validity)
-- **Not included:** real-time station-level price prediction for every gas station
-- **Important:** Forecast accuracy depends on data frequency, reporting lag, and sudden geopolitical shocks.
+The model uses 23 engineered features:
+
+- **Gas price lags** — `gas_lag_1/2/3/5/10/21`
+- **WTI lags** — `wti_cad_lag_1/2/5`
+- **Rolling statistics** — 5/10/21-day rolling mean and std
+- **Momentum** — 1-day and 5-day WTI and gas price changes
+- **Calendar** — day of week, month
 
 ---
+
+## Running Locally
+
+### Prerequisites
+
+```bash
+pip install flask pandas numpy scikit-learn lightgbm xgboost joblib requests openpyxl gunicorn
+```
+
+### 1. Run the notebooks in order
+
+```
+Notebooks/montreal_gas_daily_build.ipynb
+Notebooks/montreal_gas_feature_engineering.ipynb
+Notebooks/montreal_gas_modelling.ipynb
+Notebooks/montreal_gas_inference.ipynb
+```
+
+### 3. Start the web app
+
+```bash
+cd webapp
+python app.py
+```
+
+Then open `http://127.0.0.1:5000`
+
+### 4. (Optional) Run the local scheduler
+
+```bash
+python scheduler.py
+```
+
+Retrains the model daily at 8:00 AM automatically.
+
+---
+
+## Deployment
+
+The app is deployed on [Render](https://render.com) and retrains automatically via GitHub Actions every day at 8AM EST.
+
+**GitHub Actions pipeline** (`.github/workflows/daily_pipeline.yml`):
+1. Downloads the latest Kalibrate gas price data
+2. Fetches WTI and CAD/USD from FRED
+3. Rebuilds the feature matrix
+4. Retrains Ridge + LightGBM on all available data
+5. Commits updated files back to the repo
+6. Render auto-deploys on commit
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Data pipeline | Python, pandas, requests |
+| ML models | scikit-learn (Ridge), LightGBM, XGBoost |
+| Web backend | Flask, Gunicorn |
+| Frontend | HTML, CSS, JavaScript, Chart.js |
+| Automation | GitHub Actions |
+| Hosting | Render |
