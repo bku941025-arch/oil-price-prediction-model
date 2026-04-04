@@ -1,0 +1,41 @@
+name: Daily Gas Price Pipeline
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # Every day at 8:00 AM EST (13:00 UTC)
+  workflow_dispatch:        # Allow manual trigger from GitHub UI
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pandas numpy scikit-learn lightgbm joblib requests openpyxl
+
+      - name: Run pipeline
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+        run: python pipeline.py
+
+      - name: Commit and push updated files
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Data/montreal_gas_ml_ready.csv
+          git add Data/forecast_28day.csv
+          git add Data/forecast_weekly.csv
+          git add webapp/model_ridge.pkl
+          git add webapp/model_lgbm.pkl
+          git add webapp/scaler.pkl
+          git add webapp/retrain_log.json
+          git diff --staged --quiet || git commit -m "Auto-update: $(date +'%Y-%m-%d') pipeline run"
+          git push
