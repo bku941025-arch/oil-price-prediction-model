@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Forecast — GasPrix MTL' if lang == 'en' else 'Prévision — GasPrix MTL' }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">
+        {{ 'Montréal Gas Price Forecast' if lang == 'en' else 'Prévision du prix de l\'essence à Montréal' }}
+    </h1>
+    <p class="page-subtitle">
+        {{ '4-week price range based on historical trends and market data' if lang == 'en' else 'Fourchette de prix sur 4 semaines basée sur les tendances historiques et les données du marché' }}
+    </p>
+</div>
+
+<!-- Status bar -->
+<div class="status-bar" id="status-bar">
+    <div class="status-item">
+        <span class="status-label">{{ 'Today\'s price' if lang == 'en' else 'Prix aujourd\'hui' }}</span>
+        <span class="status-value" id="today-price">—</span>
+    </div>
+    <div class="status-item">
+        <span class="status-label">{{ 'Data up to' if lang == 'en' else 'Données jusqu\'au' }}</span>
+        <span class="status-value" id="data-date">—</span>
+    </div>
+    <div class="status-item">
+        <span class="status-label">{{ 'Last retrain' if lang == 'en' else 'Dernier réentraînement' }}</span>
+        <span class="status-value" id="last-retrain">—</span>
+    </div>
+</div>
+
+<!-- Forecast chart -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            {{ '4-Week Price Forecast' if lang == 'en' else 'Prévision sur 4 semaines' }}
+        </h2>
+        <p class="card-subtitle">
+            {{ 'Shaded area shows the expected price range. Wider band = more uncertainty.' if lang == 'en' else 'La zone ombrée montre la fourchette de prix prévue. Bande plus large = plus d\'incertitude.' }}
+        </p>
+    </div>
+    <div class="chart-container">
+        <canvas id="forecastChart"></canvas>
+    </div>
+</div>
+
+<!-- Weekly ranges -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            {{ 'Weekly Price Ranges' if lang == 'en' else 'Fourchettes de prix hebdomadaires' }}
+        </h2>
+    </div>
+    <div class="weekly-grid" id="weekly-grid">
+        <!-- Populated by JS -->
+    </div>
+</div>
+
+<script>
+const LANG = '{{ lang }}';
+const labels = {
+    week: LANG === 'en' ? 'Week' : 'Semaine',
+    range: LANG === 'en' ? 'Range' : 'Fourchette',
+    mid: LANG === 'en' ? 'Expected' : 'Attendu',
+    historical: LANG === 'en' ? 'Historical price' : 'Prix historique',
+    forecast: LANG === 'en' ? 'Forecast (mid)' : 'Prévision (milieu)',
+    band: LANG === 'en' ? 'Forecast range' : 'Fourchette prévue',
+    loading: LANG === 'en' ? 'Loading...' : 'Chargement...',
+    error: LANG === 'en' ? 'Failed to load data.' : 'Échec du chargement.',
+};
+
+let chart = null;
+
+async function loadForecast() {
+    try {
+        const res  = await fetch('/api/forecast');
+        const data = await res.json();
+
+        if (data.error) throw new Error(data.error);
+
+        // Status bar
+        document.getElementById('today-price').textContent = data.today_price.toFixed(1) + ' ¢/L';
+        document.getElementById('data-date').textContent   = data.today_date;
+        if (data.retrain_status) {
+            document.getElementById('last-retrain').textContent = data.retrain_status.last_retrain;
+        }
+
+        // Build chart data
+        const histDates  = data.historical.map(h => h.date);
+        const histPrices = data.historical.map(h => h.price);
+        const fcDates    = data.forecast.map(f => f.date);
+        const fcMid      = data.forecast.map(f => f.pred_mid);
+        const fcLow      = data.forecast.map(f => f.pred_low);
+        const fcHigh     = data.forecast.map(f => f.pred_high);
+
+        const allDates   = [...histDates, ...fcDates];
+        const histLine   = [...histPrices, ...Array(fcDates.length).fill(null)];
+        const fcMidLine  = [...Array(histDates.length).fill(null), ...fcMid];
+        const fcLowLine  = [...Array(histDates.length).fill(null), ...fcLow];
+        const fcHighLine = [...Array(histDates.length).fill(null), ...fcHigh];
+
+        const ctx = document.getElementById('forecastChart').getContext('2d');
+        if (chart) chart.destroy();
+
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: allDates,
+                datasets: [
+                    {
+                        label: labels.historical,
+                        data: histLine,
+                        borderColor: '#2c5f8a',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        fill: false
+                    },
+                    {
+                        label: labels.forecast,
+                        data: fcMidLine,
+                        borderColor: '#e07b39',
+                        borderWidth: 2,
+                        borderDash: [6, 3],
+                        pointRadius: 0,
+                        tension: 0.3,
+                        fill: false
+                    },
+                    {
+                        label: labels.band,
+                        data: fcHighLine,
+                        borderColor: 'transparent',
+                        backgroundColor: 'rgba(224, 123, 57, 0.12)',
+                        pointRadius: 0,
+                        fill: '+1',
+                        tension: 0.3
+                    },
+                    {
+                        label: '_low',
+                        data: fcLowLine,
+                        borderColor: 'transparent',
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.3
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        labels: {
+                            filter: item => item.text !== '_low',
+                            font: { family: 'DM Sans', size: 12 }
+                        }
+                    },
+                    tooltip: {
+                        filter: item => item.dataset.label !== '_low',
+                        callbacks: {
+                            label: ctx => {
+                                if (ctx.dataset.label === '_low') return null;
+                                return `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)} ¢/L`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            maxTicksLimit: 10,
+                            font: { family: 'DM Sans', size: 11 }
+                        },
+                        grid: { color: 'rgba(0,0,0,0.04)' }
+                    },
+                    y: {
+                        ticks: {
+                            callback: v => v + '¢',
+                            font: { family: 'DM Sans', size: 11 }
+                        },
+                        grid: { color: 'rgba(0,0,0,0.04)' }
+                    }
+                }
+            }
+        });
+
+        // Weekly cards
+        const grid = document.getElementById('weekly-grid');
+        grid.innerHTML = '';
+        data.weekly.forEach(w => {
+            const card = document.createElement('div');
+            card.className = 'week-card';
+            card.innerHTML = `
+                <div class="week-label">${labels.week} ${w.week}</div>
+                <div class="week-dates">${w.date_from} → ${w.date_to}</div>
+                <div class="week-mid">${w.mid.toFixed(1)} ¢/L</div>
+                <div class="week-range">${w.low.toFixed(1)} – ${w.high.toFixed(1)} ¢/L</div>
+                <div class="week-range-label">${labels.range}</div>
+            `;
+            grid.appendChild(card);
+        });
+
+    } catch (e) {
+        console.error(e);
+        document.getElementById('weekly-grid').innerHTML = `<p class="error-msg">${labels.error}</p>`;
+    }
+}
+
+loadForecast();
+</script>
+{% endblock %}

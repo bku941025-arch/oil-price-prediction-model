@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GasPrix MTL{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+    <a href="/?lang={{ lang }}" class="nav-brand">
+        <span class="brand-icon">⛽</span>
+        <span class="brand-name">GasPrix<span class="brand-mtl">MTL</span></span>
+    </a>
+
+    <div class="nav-links">
+        <a href="/?lang={{ lang }}" class="nav-link {% if request.path == '/' %}active{% endif %}">
+            {{ 'Forecast' if lang == 'en' else 'Prévision' }}
+        </a>
+        <a href="/budget?lang={{ lang }}" class="nav-link {% if request.path == '/budget' %}active{% endif %}">
+            {{ 'Budget' if lang == 'en' else 'Budget' }}
+        </a>
+        <a href="/fillup?lang={{ lang }}" class="nav-link {% if request.path == '/fillup' %}active{% endif %}">
+            {{ 'Best Day' if lang == 'en' else 'Meilleur Jour' }}
+        </a>
+    </div>
+
+    <div class="nav-lang">
+        <a href="{{ request.path }}?lang=en" class="lang-btn {% if lang == 'en' %}active{% endif %}">EN</a>
+        <span class="lang-sep">·</span>
+        <a href="{{ request.path }}?lang=fr" class="lang-btn {% if lang == 'fr' %}active{% endif %}">FR</a>
+    </div>
+</nav>
+
+<main class="main-content">
+    {% block content %}{% endblock %}
+</main>
+
+<footer class="footer">
+    <p>
+        {{ 'Data updated daily via Kalibrate & FRED. Forecasts are estimates — not financial advice.' if lang == 'en' else 'Données mises à jour quotidiennement via Kalibrate & FRED. Les prévisions sont des estimations — pas des conseils financiers.' }}
+    </p>
+</footer>
+
+</body>
+</html>

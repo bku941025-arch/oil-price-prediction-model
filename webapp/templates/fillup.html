@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Best Day to Fill Up — GasPrix MTL' if lang == 'en' else 'Meilleur Jour — GasPrix MTL' }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">
+        {{ 'Best Day to Fill Up' if lang == 'en' else 'Meilleur jour pour faire le plein' }}
+    </h1>
+    <p class="page-subtitle">
+        {{ '7-day forecast to help you pick the cheapest day to fill your tank' if lang == 'en' else 'Prévision sur 7 jours pour choisir le jour le moins cher pour faire le plein' }}
+    </p>
+</div>
+
+<!-- Best day recommendation card -->
+<div class="card" id="recommendation-card" style="border-left: 4px solid var(--accent);">
+    <div id="recommendation-loading" style="text-align:center; color: var(--mid); padding: 2rem;">
+        {{ 'Loading recommendation...' if lang == 'en' else 'Chargement...' }}
+    </div>
+    <div id="recommendation-content" style="display:none;">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; gap:1.5rem;">
+            <div>
+                <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--accent); font-weight:600; margin-bottom:0.4rem;">
+                    {{ '🏆 Best day to fill up' if lang == 'en' else '🏆 Meilleur jour pour faire le plein' }}
+                </div>
+                <div id="best-day-name" style="font-family:'DM Serif Display',serif; font-size:2.2rem; color:var(--black); margin-bottom:0.25rem;"></div>
+                <div id="best-day-price" style="font-size:1rem; color:var(--mid);"></div>
+            </div>
+            <div style="text-align:right;">
+                <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--light); font-weight:600; margin-bottom:0.4rem;">
+                    {{ 'Estimated savings vs worst day' if lang == 'en' else 'Économies vs pire jour' }}
+                </div>
+                <div id="savings-amount" style="font-family:'DM Serif Display',serif; font-size:2.2rem; color:var(--green);"></div>
+                <div id="savings-note" style="font-size:0.82rem; color:var(--light);"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 7-day breakdown -->
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">
+            {{ '7-Day Price Forecast' if lang == 'en' else 'Prévision sur 7 jours' }}
+        </h2>
+        <p class="card-subtitle">
+            {{ 'Predicted price range for each day. Green = cheapest, red = most expensive.' if lang == 'en' else 'Fourchette de prix prévue pour chaque jour. Vert = moins cher, rouge = plus cher.' }}
+        </p>
+    </div>
+    <div id="days-grid" class="days-grid">
+        <!-- Populated by JS -->
+    </div>
+</div>
+
+<!-- Tank size input -->
+<div class="card card-narrow">
+    <div class="card-header">
+        <h2 class="card-title">
+            {{ 'Customise Tank Size' if lang == 'en' else 'Personnaliser la taille du réservoir' }}
+        </h2>
+    </div>
+    <div class="input-group">
+        <label class="input-label" for="tank-input">
+            {{ 'Your tank size (litres)' if lang == 'en' else 'Taille de votre réservoir (litres)' }}
+        </label>
+        <div class="input-row">
+            <input type="number" id="tank-input" class="spend-input"
+                   value="50" min="10" max="120" step="5"/>
+            <span style="font-size:0.9rem; color:var(--mid);">L</span>
+            <button class="btn-primary" onclick="recalcSavings()">
+                {{ 'Update' if lang == 'en' else 'Mettre à jour' }}
+            </button>
+        </div>
+    </div>
+    <div id="custom-savings" style="margin-top:1rem; font-size:0.9rem; color:var(--mid);"></div>
+</div>
+
+<style>
+.days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 0.75rem;
+}
+
+.day-card {
+    border-radius: var(--radius);
+    padding: 1rem 0.75rem;
+    text-align: center;
+    border: 1.5px solid var(--border);
+    position: relative;
+    transition: transform 0.15s;
+}
+
+.day-card:hover { transform: translateY(-2px); }
+
+.day-card.best  { border-color: #3aaa6e; background: #eaf7ef; }
+.day-card.worst { border-color: #e07b39; background: #fdf0e8; }
+
+.day-name  { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--light); margin-bottom:0.4rem; font-weight:600; }
+.day-date  { font-size:0.7rem; color:var(--light); margin-bottom:0.6rem; }
+.day-price { font-family:'DM Serif Display',serif; font-size:1.4rem; color:var(--black); margin-bottom:0.2rem; }
+.day-range { font-size:0.68rem; color:var(--light); margin-bottom:0.4rem; }
+.day-vs    { font-size:0.75rem; font-weight:600; padding:0.15rem 0.5rem; border-radius:4px; display:inline-block; }
+.day-vs.up   { background:#fdf0e8; color:#c0502a; }
+.day-vs.down { background:#eaf7ef; color:#2a7a50; }
+.day-vs.flat { background:var(--bg); color:var(--mid); }
+
+.day-badge {
+    position:absolute; top:-8px; left:50%; transform:translateX(-50%);
+    font-size:0.65rem; font-weight:600; padding:0.1rem 0.5rem;
+    border-radius:10px; white-space:nowrap;
+}
+.day-badge.best  { background:#3aaa6e; color:#fff; }
+.day-badge.worst { background:#e07b39; color:#fff; }
+
+@media (max-width: 700px) {
+    .days-grid { grid-template-columns: repeat(4, 1fr); }
+}
+@media (max-width: 480px) {
+    .days-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+
+<script>
+const LANG = '{{ lang }}';
+let forecastData = null;
+
+const DAY_NAMES_EN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAY_NAMES_FR = ['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+
+function getDayName(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return LANG === 'en' ? DAY_NAMES_EN[d.getDay()] : DAY_NAMES_FR[d.getDay()];
+}
+
+function formatDate(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+async function loadFillup() {
+    try {
+        const res  = await fetch('/api/fillup');
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+
+        forecastData = data;
+
+        // Recommendation card
+        const bestDate   = new Date(data.best_day.date + 'T00:00:00');
+        const bestDayFull = LANG === 'en'
+            ? bestDate.toLocaleDateString('en-CA', {weekday:'long', month:'long', day:'numeric'})
+            : bestDate.toLocaleDateString('fr-CA', {weekday:'long', month:'long', day:'numeric'});
+
+        document.getElementById('best-day-name').textContent  = bestDayFull;
+        document.getElementById('best-day-price').textContent =
+            `${data.best_day.pred_mid.toFixed(1)} ¢/L  (${data.best_day.pred_low.toFixed(1)} – ${data.best_day.pred_high.toFixed(1)} ¢/L)`;
+        document.getElementById('savings-amount').textContent = `$${data.savings_low.toFixed(2)} – $${data.savings_high.toFixed(2)}`;
+        document.getElementById('savings-note').textContent   = LANG === 'en'
+            ? `on a ${data.tank_size}L fill-up vs the most expensive day`
+            : `sur un plein de ${data.tank_size}L vs le jour le plus cher`;
+
+        document.getElementById('recommendation-loading').style.display = 'none';
+        document.getElementById('recommendation-content').style.display = 'block';
+
+        // Day cards
+        const grid      = document.getElementById('days-grid');
+        const bestDate_ = data.best_day.date;
+        const worstDate = data.worst_day.date;
+
+        grid.innerHTML = '';
+        data.forecast.forEach(day => {
+            const isBest  = day.date === bestDate_;
+            const isWorst = day.date === worstDate;
+            const vs      = day.vs_today;
+            const vsClass = vs > 0.5 ? 'up' : vs < -0.5 ? 'down' : 'flat';
+            const vsSign  = vs > 0 ? '+' : '';
+            const vsLabel = LANG === 'en'
+                ? (vsClass === 'flat' ? '≈ same as today' : `${vsSign}${vs.toFixed(1)} ¢/L vs today`)
+                : (vsClass === 'flat' ? '≈ même qu\'aujourd\'hui' : `${vsSign}${vs.toFixed(1)} ¢/L vs auj.`);
+
+            const card = document.createElement('div');
+            card.className = `day-card${isBest ? ' best' : isWorst ? ' worst' : ''}`;
+
+            let badge = '';
+            if (isBest)  badge = `<div class="day-badge best">${LANG === 'en' ? '✓ Best' : '✓ Mieux'}</div>`;
+            if (isWorst) badge = `<div class="day-badge worst">${LANG === 'en' ? 'Most exp.' : 'Plus cher'}</div>`;
+
+            card.innerHTML = `
+                ${badge}
+                <div class="day-name">${getDayName(day.date)}</div>
+                <div class="day-date">${formatDate(day.date)}</div>
+                <div class="day-price">${day.pred_mid.toFixed(1)}¢</div>
+                <div class="day-range">${day.pred_low.toFixed(1)} – ${day.pred_high.toFixed(1)}</div>
+                <span class="day-vs ${vsClass}">${vsLabel}</span>
+            `;
+            grid.appendChild(card);
+        });
+
+    } catch(e) {
+        document.getElementById('recommendation-loading').textContent =
+            LANG === 'en' ? 'Failed to load data.' : 'Échec du chargement.';
+        console.error(e);
+    }
+}
+
+function recalcSavings() {
+    if (!forecastData) return;
+    const tank = parseFloat(document.getElementById('tank-input').value) || 50;
+    const low  = ((forecastData.worst_day.pred_mid - forecastData.best_day.pred_mid) / 100 * tank).toFixed(2);
+    const high = ((forecastData.worst_day.pred_high - forecastData.best_day.pred_low) / 100 * tank).toFixed(2);
+    document.getElementById('custom-savings').textContent = LANG === 'en'
+        ? `With a ${tank}L tank: estimated savings of $${low} – $${high} by filling up on the best day vs the worst day.`
+        : `Avec un réservoir de ${tank}L : économies estimées de ${low} $ – ${high} $ en faisant le plein le meilleur jour vs le pire.`;
+}
+
+loadFillup();
+</script>
+{% endblock %}

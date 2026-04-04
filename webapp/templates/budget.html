@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Budget — GasPrix MTL' if lang == 'en' else 'Budget — GasPrix MTL' }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">
+        {{ 'Monthly Budget Estimator' if lang == 'en' else 'Estimateur de budget mensuel' }}
+    </h1>
+    <p class="page-subtitle">
+        {{ 'Enter last month\'s gas spend to estimate your upcoming budget' if lang == 'en' else 'Entrez vos dépenses en essence du mois dernier pour estimer votre budget à venir' }}
+    </p>
+</div>
+
+<!-- Input card -->
+<div class="card card-narrow">
+    <div class="card-header">
+        <h2 class="card-title">
+            {{ 'Your Gas Spend Last Month' if lang == 'en' else 'Vos dépenses en essence le mois dernier' }}
+        </h2>
+    </div>
+
+    <div class="input-group">
+        <label class="input-label" for="spend-input">
+            {{ 'Amount spent on gas last month (CAD $)' if lang == 'en' else 'Montant dépensé en essence le mois dernier (CAD $)' }}
+        </label>
+        <div class="input-row">
+            <span class="input-prefix">$</span>
+            <input
+                type="number"
+                id="spend-input"
+                class="spend-input"
+                placeholder="e.g. 60.00"
+                min="1"
+                step="0.01"
+            />
+            <button class="btn-primary" onclick="calculateBudget()">
+                {{ 'Calculate' if lang == 'en' else 'Calculer' }}
+            </button>
+        </div>
+    </div>
+
+    <div id="result-section" class="result-section hidden">
+
+        <!-- Implied consumption -->
+        <div class="consumption-summary">
+            <div class="consumption-item">
+                <span class="consumption-label">{{ 'Last month avg price' if lang == 'en' else 'Prix moy. mois dernier' }}</span>
+                <span class="consumption-value" id="last-avg">—</span>
+            </div>
+            <div class="consumption-item">
+                <span class="consumption-label">{{ 'Implied consumption' if lang == 'en' else 'Consommation estimée' }}</span>
+                <span class="consumption-value" id="implied-litres">—</span>
+            </div>
+            <div class="consumption-item">
+                <span class="consumption-label">{{ 'Forecast price range' if lang == 'en' else 'Fourchette de prix prévue' }}</span>
+                <span class="consumption-value" id="forecast-range">—</span>
+            </div>
+        </div>
+
+        <!-- Budget cards -->
+        <div class="budget-grid">
+            <div class="budget-card budget-optimistic">
+                <div class="budget-scenario">{{ 'Optimistic' if lang == 'en' else 'Optimiste' }}</div>
+                <div class="budget-amount" id="budget-low">—</div>
+                <div class="budget-note">{{ 'If prices drop' if lang == 'en' else 'Si les prix baissent' }}</div>
+            </div>
+            <div class="budget-card budget-expected">
+                <div class="budget-scenario">{{ 'Expected' if lang == 'en' else 'Attendu' }}</div>
+                <div class="budget-amount" id="budget-mid">—</div>
+                <div class="budget-note">{{ 'If prices stay similar' if lang == 'en' else 'Si les prix restent similaires' }}</div>
+            </div>
+            <div class="budget-card budget-conservative">
+                <div class="budget-scenario">{{ 'Conservative' if lang == 'en' else 'Conservateur' }}</div>
+                <div class="budget-amount" id="budget-high">—</div>
+                <div class="budget-note">{{ 'If prices rise' if lang == 'en' else 'Si les prix augmentent' }}</div>
+            </div>
+        </div>
+
+        <!-- Recommendation -->
+        <div class="recommendation" id="recommendation"></div>
+
+        <!-- Budget chart -->
+        <div class="chart-container chart-small">
+            <canvas id="budgetChart"></canvas>
+        </div>
+
+    </div>
+</div>
+
+<!-- Disclaimer -->
+<div class="disclaimer">
+    <p>
+        {{ '⚠️ These estimates are based on recent price trends and your historical consumption. Actual prices may differ due to market events, policy changes, or seasonal factors.' if lang == 'en' else '⚠️ Ces estimations sont basées sur les tendances de prix récentes et votre consommation historique. Les prix réels peuvent différer en raison d\'événements de marché, de changements de politique ou de facteurs saisonniers.' }}
+    </p>
+</div>
+
+<script>
+const LANG = '{{ lang }}';
+let budgetChart = null;
+
+async function calculateBudget() {
+    const spend = parseFloat(document.getElementById('spend-input').value);
+    if (!spend || spend <= 0) {
+        alert(LANG === 'en' ? 'Please enter a valid amount.' : 'Veuillez entrer un montant valide.');
+        return;
+    }
+
+    const btn = document.querySelector('.btn-primary');
+    btn.textContent = LANG === 'en' ? 'Calculating...' : 'Calcul en cours...';
+    btn.disabled = true;
+
+    try {
+        const res  = await fetch('/api/budget', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ last_month_spend: spend })
+        });
+        const data = await res.json();
+
+        if (data.error) throw new Error(data.error);
+
+        // Populate consumption summary
+        document.getElementById('last-avg').textContent      = data.last_month_avg + ' ¢/L';
+        document.getElementById('implied-litres').textContent = data.implied_litres + ' L';
+        document.getElementById('forecast-range').textContent = `${data.forecast_low_avg} – ${data.forecast_high_avg} ¢/L`;
+
+        // Budget cards
+        document.getElementById('budget-low').textContent  = '$' + data.budget_optimistic.toFixed(2);
+        document.getElementById('budget-mid').textContent  = '$' + data.budget_expected.toFixed(2);
+        document.getElementById('budget-high').textContent = '$' + data.budget_conservative.toFixed(2);
+
+        // Recommendation
+        const rec = document.getElementById('recommendation');
+        rec.textContent = LANG === 'en'
+            ? `💡 We recommend budgeting between $${data.budget_optimistic.toFixed(0)} – $${data.budget_conservative.toFixed(0)} for next month.`
+            : `💡 Nous vous recommandons de prévoir entre ${data.budget_optimistic.toFixed(0)} $ – ${data.budget_conservative.toFixed(0)} $ pour le mois prochain.`;
+
+        // Chart
+        const ctx = document.getElementById('budgetChart').getContext('2d');
+        if (budgetChart) budgetChart.destroy();
+
+        const scenarioLabels = LANG === 'en'
+            ? ['Optimistic\n(prices drop)', 'Expected\n(stable)', 'Conservative\n(prices rise)']
+            : ['Optimiste\n(prix baissent)', 'Attendu\n(stable)', 'Conservateur\n(prix montent)'];
+
+        budgetChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: scenarioLabels,
+                datasets: [{
+                    data: [data.budget_optimistic, data.budget_expected, data.budget_conservative],
+                    backgroundColor: ['#3aaa6e', '#5b9bd5', '#e07b39'],
+                    borderRadius: 6,
+                    borderSkipped: false
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `$${ctx.parsed.y.toFixed(2)}`
+                        }
+                    },
+                    annotation: {
+                        annotations: {
+                            lastMonth: {
+                                type: 'line',
+                                yMin: spend,
+                                yMax: spend,
+                                borderColor: '#333',
+                                borderWidth: 1.5,
+                                borderDash: [5, 3],
+                                label: {
+                                    display: true,
+                                    content: LANG === 'en' ? `Last month: $${spend.toFixed(2)}` : `Mois dernier: ${spend.toFixed(2)} $`,
+                                    position: 'end',
+                                    font: { family: 'DM Sans', size: 11 }
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        ticks: {
+                            callback: v => '$' + v,
+                            font: { family: 'DM Sans', size: 11 }
+                        },
+                        grid: { color: 'rgba(0,0,0,0.04)' }
+                    },
+                    x: {
+                        ticks: { font: { family: 'DM Sans', size: 11 } },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+
+        document.getElementById('result-section').classList.remove('hidden');
+
+    } catch (e) {
+        alert(LANG === 'en' ? 'Failed to calculate budget.' : 'Échec du calcul du budget.');
+        console.error(e);
+    } finally {
+        btn.textContent = LANG === 'en' ? 'Calculate' : 'Calculer';
+        btn.disabled = false;
+    }
+}
+
+// Allow pressing Enter to calculate
+document.getElementById('spend-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') calculateBudget();
+});
+</script>
+{% endblock %}

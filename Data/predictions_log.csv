@@ -1,0 +1,2 @@
+prediction_made_on,predicting_for,actual_price_today,pred_ridge,pred_lgbm,pred_ensemble,actual_tomorrow
+2026-03-31,2026-04-01,193.1,196.15,187.96,192.06,
