@@ -187,10 +187,13 @@ def api_forecast():
 @app.route('/api/budget', methods=['POST'])
 def api_budget():
     try:
-        data             = request.get_json()
-        last_month_spend = float(data.get('last_month_spend', 0))
+        data = request.get_json(silent=True) or {}
+        try:
+            last_month_spend = float(data.get('last_month_spend', 0))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Invalid spend amount'}), 400
 
-        if last_month_spend <= 0:
+        if not np.isfinite(last_month_spend) or last_month_spend <= 0:
             return jsonify({'error': 'Invalid spend amount'}), 400
 
         df                   = load_data()

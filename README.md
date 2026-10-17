@@ -62,7 +62,7 @@ The model uses 23 engineered features:
 ### Prerequisites
 
 ```bash
-pip install flask pandas numpy scikit-learn lightgbm xgboost joblib requests openpyxl gunicorn
+pip install -r requirements.txt
 ```
 
 ### 1. Run the notebooks in order
@@ -74,7 +74,7 @@ Notebooks/montreal_gas_modelling.ipynb
 Notebooks/montreal_gas_inference.ipynb
 ```
 
-### 3. Start the web app
+### 2. Start the web app
 
 ```bash
 cd webapp
@@ -83,9 +83,10 @@ python app.py
 
 Then open `http://127.0.0.1:5000`
 
-### 4. (Optional) Run the local scheduler
+### 3. (Optional) Run the local scheduler
 
 ```bash
+export FRED_API_KEY=your_key
 python scheduler.py
 ```
 
