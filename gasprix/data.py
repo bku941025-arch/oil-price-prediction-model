@@ -35,6 +35,7 @@ KALIBRATE_URL = (
 FRED_SERIES = {
     'DCOILWTICO': ('wti_usd',  3),    # WTI crude, USD/barrel
     'DGASNYH'   : ('rbob_usd', 3),    # NY Harbor conventional gasoline, USD/gallon
+    'DGASUSGULF': ('gulf_usd', 3),    # US Gulf Coast conventional gasoline, USD/gallon
     'DEXCAUS'   : ('cadusd_fred', 10),
 }
 BOC_FX = ('FXUSDCAD', 'cadusd', 1)    # CAD per USD, daily
@@ -156,6 +157,7 @@ def align_market(market, index, max_staleness_days=10):
     m = k.reindex(k.index.union(index)).ffill(limit=max_staleness_days).reindex(index)
     m['wti_cad']    = m['wti_usd'] * m['cadusd']                                # CAD/barrel
     m['rbob_cad_l'] = m['rbob_usd'] * m['cadusd'] / LITRES_PER_GALLON * 100      # wholesale, ¢/L CAD
+    m['gulf_cad_l'] = m['gulf_usd'] * m['cadusd'] / LITRES_PER_GALLON * 100
     m['crack_usd']  = m['rbob_usd'] * 42 - m['wti_usd']                          # USD/barrel
     return m
 
@@ -163,4 +165,5 @@ def align_market(market, index, max_staleness_days=10):
 def market_staleness_days(market, as_of):
     """Days the oldest series is behind what its publication lag allows."""
     as_of = pd.Timestamp(as_of)
-    return max((as_of - market[n].dropna().index.max()).days - LAGS[n] for n in ('wti_usd', 'rbob_usd', 'cadusd'))
+    return max((as_of - market[n].dropna().index.max()).days - LAGS[n]
+               for n in ('wti_usd', 'rbob_usd', 'gulf_usd', 'cadusd'))

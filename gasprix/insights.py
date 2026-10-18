@@ -13,7 +13,6 @@ import pandas as pd
 
 from . import taxes
 from .cities import CITIES
-from .data import LITRES_PER_GALLON
 
 LITRES_PER_BARREL = 158.987
 
@@ -51,12 +50,12 @@ def explain(model, rows, horizons, tax_change):
         r_contrib = (xr.values - scaler.mean_) / scaler.scale_ * lin.coef_
         r = pd.DataFrame(r_contrib, columns=model.ridge_columns, index=rows.index)
         l_contrib = lgbm.predict(X, pred_contrib=True)
-        l = pd.DataFrame(l_contrib[:, :-1], columns=model.columns, index=rows.index)
+        lg = pd.DataFrame(l_contrib[:, :-1], columns=model.columns, index=rows.index)
 
         w = model.shrink[h] / 2
         parts = pd.DataFrame(0.0, index=rows.index, columns=list(DRIVER_GROUPS))
         for col in model.columns:
-            v = l[col] + (r[col] if col in r else 0)
+            v = lg[col] + (r[col] if col in r else 0)
             parts[_group(col)] += w * v
         parts['baseline'] = w * (lin.intercept_ + l_contrib[:, -1])
         parts['taxes'] = tax_change[h]
@@ -142,4 +141,45 @@ def weekday_effect(raw_prices, years=2):
     for wd, d in dev.groupby(dev.index.dayofweek):
         out[int(wd)] = {'mean': round(float(d.mean()), 2),
                         'se': round(float(d.std() / np.sqrt(len(d))), 2), 'n': int(len(d))}
+    return out
+
+
+def tax_anomalies(prices, market, lookback_days=10, min_cities=3, min_jump=8.0, agree=0.8):
+    """
+    Province-wide price jumps that neither the tax table nor wholesale moves explain, i.e. a
+    tax change that may be missing from taxes.py. Compares consecutive days Kalibrate actually
+    reported (weekdays, not holidays) and skips regulated provinces, whose weekly settings
+    jump by design. Tuned on 2016–2026: with the table, about one flag a year (large market
+    spikes); without it, every major tax change is flagged.
+    Returns [{province, date, change}].
+    """
+    import holidays as hol
+
+    from .cities import REGULATED
+    from .features import ex_tax  # avoid a circular import at module load
+
+    end = prices.index.max()
+    national = hol.Canada(years=range(end.year - 1, end.year + 1))
+    reported = [d for d in prices.index[prices.index > end - pd.Timedelta(days=lookback_days + 7)]
+                if d.dayofweek < 5 and d not in national]
+    rbob = market['rbob_cad_l']
+    whole = (rbob - rbob.shift(7)).abs().reindex(prices.index)
+    by_prov = {}
+    for slug in prices.columns:
+        by_prov.setdefault(CITIES[slug].province, []).append(slug)
+
+    out = []
+    for prov, slugs in by_prov.items():
+        if prov in REGULATED or len(slugs) < min_cities:
+            continue
+        ex = pd.DataFrame({s: ex_tax(prices[s].dropna(), s) for s in slugs if prices[s].notna().any()})
+        d1 = ex.reindex(reported).diff()
+        for day, row in d1[d1.index > end - pd.Timedelta(days=lookback_days)].iterrows():
+            row = row.dropna()
+            if len(row) < min_cities:
+                continue
+            med = row.median()
+            same = (np.sign(row) == np.sign(med)).mean()
+            if abs(med) >= min_jump and same >= agree and (whole.get(day) or 0) < min_jump / 2:
+                out.append({'province': prov, 'date': day.strftime('%Y-%m-%d'), 'change': round(float(med), 1)})
     return out

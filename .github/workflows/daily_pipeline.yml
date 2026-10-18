@@ -35,8 +35,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        # Keep versions in sync with requirements.txt
-        run: pip install pandas numpy scikit-learn==1.9.1 lightgbm==4.7.0 holidays==0.106 requests openpyxl
+        run: pip install -r requirements.txt
 
       - name: Run pipeline
         # Fails (and publishes nothing) if data is stale or accuracy drops sharply
@@ -48,15 +47,37 @@ jobs:
           MASTODON_URL: ${{ secrets.MASTODON_URL }}
           MASTODON_TOKEN: ${{ secrets.MASTODON_TOKEN }}
           SITE_URL: ${{ vars.SITE_URL }}
+          MODEL_VERSION: ${{ github.sha }}
         run: python pipeline.py
 
       - name: Commit and push updated files
+        # With PUBLISH_BRANCH set, generated site files go to that branch instead of main,
+        # so main only receives the small prediction/signal logs.
+        env:
+          PUBLISH_BRANCH: ${{ vars.PUBLISH_BRANCH }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add site/data site/feeds Data/predictions Data/signals.csv Data/metrics.json
+          git add Data/predictions Data/signals.csv Data/metrics.json
+          if [ -z "$PUBLISH_BRANCH" ]; then git add site/data site/feeds; fi
           git diff --staged --quiet || git commit -m "Auto-update: $(date +'%Y-%m-%d') pipeline run"
           git push
+
+      - name: Publish site to its own branch
+        if: vars.PUBLISH_BRANCH != ''
+        env:
+          PUBLISH_BRANCH: ${{ vars.PUBLISH_BRANCH }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # A single-commit branch, overwritten daily: deployable as is (Render or any static host)
+          out=$(mktemp -d)
+          cp -r site webapp requirements.txt "$out/"
+          cd "$out"
+          git init -q -b "$PUBLISH_BRANCH"
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" \
+              commit -qm "Site build $(date +'%Y-%m-%d') from ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$PUBLISH_BRANCH"
 
       - name: Upload site for GitHub Pages
         if: vars.DEPLOY_PAGES == 'true'

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="How the Model Works — PumpCast" data-fr="Fonctionnement du modèle — PumpCast">How the Model Works — PumpCast</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="How the Model Works" data-fr="Fonctionnement du modèle"></h1>
+        <p class="page-subtitle" data-en="A model card: what it does, how it was tested, and where it falls short." data-fr="Fiche du modèle : ce qu'il fait, comment il a été testé et ses limites."></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title" data-en="This forecast" data-fr="Cette prévision"></h2></div>
+        <div class="metric-grid" id="facts"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title" data-en="What it does" data-fr="Ce qu'il fait"></h2></div>
+        <div id="what" class="prob" style="font-size:0.92rem; line-height:1.6"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="Are the ranges honest?" data-fr="Les fourchettes sont-elles fiables?"></h2>
+            <p class="card-subtitle" data-en="Calibrated on the first half of the past year, tested on the second half. A well-calibrated 80% range contains the actual price about 80% of the time." data-fr="Calibrées sur la première moitié de l'année passée, testées sur la seconde. Une fourchette à 80 % bien calibrée contient le prix réel environ 80 % du temps."></p>
+        </div>
+        <div class="table-wrapper"><table class="compact-table" id="rel"></table></div>
+        <p class="prob" id="crps"></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title" data-en="Known limitations" data-fr="Limites connues"></h2></div>
+        <ul id="limits" class="prob" style="font-size:0.92rem; line-height:1.7; padding-left:1.2rem"></ul>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2 class="card-title" data-en="Inputs the model uses" data-fr="Variables utilisées"></h2></div>
+        <p class="prob" id="features" style="line-height:1.8"></p>
+    </div>
+</main>
+
+<script>
+(async () => {
+    let index;
+    try {
+        ({ index } = await loadPage({ cityData: false }));
+    } catch (e) {
+        return showError(document.querySelector('.card'), e);
+    }
+    const M = index.model;
+    const tile = (l, v, n) => `<div class="metric"><div class="metric-label">${l}</div><div class="metric-value" style="font-size:1.15rem">${v}</div><div class="metric-note">${n || ''}</div></div>`;
+    document.getElementById('facts').innerHTML =
+        tile(tr('Model version', 'Version du modèle'), `<code>${esc(M.version)}</code>`, tr('git commit', 'commit git')) +
+        tile(tr('Trained', 'Entraîné'), esc(M.trained_at), tr('retrained daily', 'réentraîné chaque jour')) +
+        tile(tr('Training data', 'Données d\'entraînement'), `${M.training_rows.toLocaleString()} ${tr('rows', 'lignes')}`, `${M.training_window[0]} → ${M.training_window[1]}`) +
+        tile(tr('Cities', 'Villes'), index.cities.length, tr('one shared model', 'un modèle commun'));
+
+    document.getElementById('what').innerHTML = tr(
+        `<p>For each horizon from 1 to 28 days, a Ridge regression and a LightGBM model predict how much the price, net of fixed taxes, will change. Their average is shrunk toward "no change" by a weight chosen on a validation year (currently ${Math.round(M.shrink[7] * 100)}% of the model's call at 7 days and ${Math.round(M.shrink[28] * 100)}% at 28 days). Tax changes that have been announced are then added back.</p>
+         <p>The model only sees market data as it was published at the time (wholesale gasoline and crude 3 days late, the exchange rate 1 day late), so its test scores reflect what it can really do. Over the past year it averaged ±${M.holdout_mae.toFixed(2)} ¢/L across 1–28 days, vs ±${M.holdout_persistence_mae.toFixed(2)} for simply assuming no change.</p>`,
+        `<p>Pour chaque horizon de 1 à 28 jours, une régression Ridge et un modèle LightGBM prédisent la variation du prix hors taxes fixes. Leur moyenne est rapprochée de « aucun changement » selon un poids choisi sur une année de validation (actuellement ${Math.round(M.shrink[7] * 100)} % de la prévision du modèle à 7 jours et ${Math.round(M.shrink[28] * 100)} % à 28 jours). Les changements de taxes annoncés sont ensuite ajoutés.</p>
+         <p>Le modèle ne voit les données de marché que telles qu'elles étaient publiées à l'époque (essence en gros et brut avec 3 jours de retard, taux de change avec 1 jour), donc ses résultats de test reflètent ce qu'il peut vraiment faire. Sur l'année passée, il a obtenu ±${M.holdout_mae.toFixed(2)} ¢/L en moyenne sur 1 à 28 jours, contre ±${M.holdout_persistence_mae.toFixed(2)} en supposant aucun changement.</p>`);
+
+    const R = M.reliability;
+    document.getElementById('rel').innerHTML = `<thead><tr><th>${tr('Range', 'Fourchette')}</th><th class="num">${tr('Should contain', 'Devrait contenir')}</th><th class="num">${tr('Actually contained', 'A réellement contenu')}</th></tr></thead><tbody>` +
+        Object.entries(R.coverage).map(([k, v]) => `<tr><td>${k}</td><td class="num">${k}</td><td class="num ${Math.abs(v - parseFloat(k) / 100) <= 0.05 ? 'better' : 'worse'}">${Math.round(v * 100)}%</td></tr>`).join('') + '</tbody>';
+    document.getElementById('crps').textContent = tr(
+        `Probabilistic score (CRPS, lower is better): ${R.crps_model.toFixed(2)} for the model vs ${R.crps_persistence.toFixed(2)} for "no change" with the same spread, over ${R.n.toLocaleString()} test forecasts.`,
+        `Score probabiliste (CRPS, plus bas = mieux) : ${R.crps_model.toFixed(2)} pour le modèle contre ${R.crps_persistence.toFixed(2)} pour « aucun changement », sur ${R.n.toLocaleString()} prévisions de test.`);
+
+    const limits = tr([
+        'Gas prices are close to a random walk: the model is only about 5% better than "no change" on average, and not better at all one day ahead.',
+        'It cannot foresee shocks: refinery outages, hurricanes, wars or surprise policy changes.',
+        'Tax rates are approximate and cover only large, documented changes. A detector flags province-wide jumps the tax table doesn\'t explain.',
+        'Kalibrate reports weekdays only, so weekend values repeat Friday.',
+        'Wholesale prices are US benchmarks (New York Harbor, Gulf Coast) standing in for Canadian rack prices.',
+        'Premium and diesel follow regular gasoline\'s expected move; they are not modelled separately.',
+        'City averages hide differences of several cents between stations.',
+    ], [
+        'Le prix de l\'essence suit presque une marche aléatoire : le modèle n\'est qu\'environ 5 % meilleur que « aucun changement » en moyenne, et pas meilleur à un jour.',
+        'Il ne peut pas prévoir les chocs : pannes de raffinerie, ouragans, guerres ou changements de politique imprévus.',
+        'Les taux de taxe sont approximatifs et ne couvrent que les changements importants et documentés. Un détecteur signale les sauts provinciaux que la table de taxes n\'explique pas.',
+        'Kalibrate publie seulement en semaine; les fins de semaine reprennent le vendredi.',
+        'Les prix de gros sont des références américaines (New York, côte du Golfe) qui remplacent les prix à la rampe canadiens.',
+        'Le super et le diesel suivent la variation prévue de l\'ordinaire; ils ne sont pas modélisés séparément.',
+        'Les moyennes municipales masquent des écarts de plusieurs cents entre stations.',
+    ]);
+    document.getElementById('limits').innerHTML = limits.map(l => `<li>${l}</li>`).join('');
+    document.getElementById('features').innerHTML = M.features.map(f => `<code>${esc(f)}</code>`).join(' ');
+})();
+</script>
+</body>
+</html>

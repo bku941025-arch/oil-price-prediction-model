@@ -1,0 +1,35 @@
+name: Back up raw data
+
+# Monthly private copy of the Kalibrate workbooks, kept as a workflow artifact
+# (visible to repo collaborators only, 90 days). Kalibrate data is © Kalibrate,
+# so it is not published as a public release.
+on:
+  schedule:
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Download current workbooks
+        run: |
+          python -c "
+          from datetime import datetime
+          from gasprix import data
+          y = datetime.now().year
+          for p in data.PRODUCTS:
+              for year in (y - 1, y):
+                  data.download_kalibrate(year, p)
+          "
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kalibrate-${{ github.run_id }}
+          path: Data/*.xlsx
+          retention-days: 90

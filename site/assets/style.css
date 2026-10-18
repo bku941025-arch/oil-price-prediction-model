@@ -3,7 +3,7 @@
     --black:      #111111;
     --dark:       #2a2a2a;
     --mid:        #666666;
-    --light:      #999999;
+    --light:      #737373;   /* 4.7:1 on white (WCAG AA) */
     --border:     #e8e8e8;
     --bg:         #fafafa;
     --white:      #ffffff;
@@ -646,3 +646,16 @@ pre.code { background: #1e2430; color: #e8edf5; padding: 1rem; border-radius: 8p
 .muted { color: var(--light); }
 .day-card.no-data { opacity: 0.55; }
 .prob { font-size: 0.82rem; color: var(--mid); margin-top: 0.35rem; }
+
+/* ── Accessibility ──────────────────────────────────────────────────────────── */
+.skip-link { position: absolute; left: -999px; top: 0.5rem; z-index: 300; background: var(--accent); color: #fff;
+             padding: 0.5rem 0.9rem; border-radius: 6px; text-decoration: none; }
+.skip-link:focus { left: 0.5rem; }
+a:focus-visible, button:focus-visible, select:focus-visible, input:focus-visible, summary:focus-visible {
+    outline: 3px solid #f0a050; outline-offset: 2px;
+}
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.btn-secondary { padding: 0.55rem 1.1rem; background: var(--white); color: var(--accent); border: 1.5px solid var(--accent);
+                 border-radius: 7px; font: 500 0.88rem 'DM Sans', sans-serif; cursor: pointer; }
+.btn-secondary:hover { background: var(--accent-lt); }
+.btn-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }

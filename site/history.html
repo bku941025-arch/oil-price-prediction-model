@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title data-en="Price History — GasPrix MTL" data-fr="Historique des prix — GasPrix MTL">Price History — GasPrix MTL</title>
+    <title data-en="Price History — PumpCast" data-fr="Historique des prix — PumpCast">Price History — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#2c5f8a">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
@@ -17,15 +17,15 @@
 <main class="main-content">
     <div class="page-header">
         <h1 class="page-title" id="title"></h1>
-        <p class="page-subtitle" data-en="Ten years of daily retail prices, with the events that moved them." data-fr="Dix ans de prix de détail quotidiens, avec les événements qui les ont fait bouger."></p>
+        <p class="page-subtitle" data-en="The past year of daily retail prices, with the events that moved them." data-fr="La dernière année de prix de détail quotidiens, avec les événements qui les ont fait bouger."></p>
     </div>
 
     <div class="card">
         <div class="card-header card-header-row">
             <div class="seg" id="range">
-                <button type="button" data-y="1" data-en="1 year" data-fr="1 an"></button>
-                <button type="button" data-y="3" data-en="3 years" data-fr="3 ans"></button>
-                <button type="button" data-y="0" class="active" data-en="All" data-fr="Tout"></button>
+                <button type="button" data-m="3" data-en="3 months" data-fr="3 mois"></button>
+                <button type="button" data-m="6" data-en="6 months" data-fr="6 mois"></button>
+                <button type="button" data-m="0" class="active" data-en="1 year" data-fr="1 an"></button>
             </div>
             <label class="checkbox-row"><span data-en="Compare with" data-fr="Comparer avec"></span>
                 <select id="compare" class="city-select" style="margin:0"><option value="">—</option></select></label>
@@ -37,7 +37,7 @@
     <div class="card card-narrow">
         <div class="card-header">
             <h2 class="card-title" data-en="Is there a cheapest day of the week?" data-fr="Y a-t-il un jour moins cher dans la semaine?"></h2>
-            <p class="card-subtitle" data-en="Average gap between each weekday's price and that week's average, last 2 years. Bars show ±2 standard errors." data-fr="Écart moyen entre le prix de chaque jour et la moyenne de sa semaine, 2 dernières années. Les barres montrent ±2 erreurs-types."></p>
+            <p class="card-subtitle" data-en="Average gap between each weekday's price and that week's average, last 2 years (computed on the full history). Bars show ±2 standard errors." data-fr="Écart moyen entre le prix de chaque jour et la moyenne de sa semaine, 2 dernières années. Les barres montrent ±2 erreurs-types."></p>
         </div>
         <div class="chart-container chart-small" style="margin-top:0"><canvas id="weekdayChart"></canvas></div>
         <div class="recommendation" id="weekday-text" style="margin-top:1rem"></div>
@@ -98,9 +98,9 @@ const eventLines = {
     compareSel.querySelector(`option[value="${CITY}"]`)?.remove();
 
     const main = series(hist);
-    let other = null, years = 0, chart = null;
+    let other = null, months = 0, chart = null;
     function draw() {
-        const cutoff = years ? new Date(Date.now() - years * 365 * 864e5).toISOString().slice(0, 10) : '';
+        const cutoff = months ? new Date(Date.now() - months * 30.4 * 864e5).toISOString().slice(0, 10) : '';
         const rows = main.filter(r => r[0] >= cutoff);
         const labels = rows.map(r => r[0]);
         const sets = [{ label: name, data: rows.map(r => r[1]), color: '#2c5f8a', width: 1.5, spanGaps: true }];
@@ -111,12 +111,16 @@ const eventLines = {
         if (chart) chart.destroy();
         Chart.register(eventLines);
         chart = bandChart(document.getElementById('historyChart'), labels, sets, { animation: false, dateFmt: { month: 'short', year: 'numeric' } });
+        const vals = rows.map(r => r[1]).filter(v => v != null);
+        describeChart(document.getElementById('historyChart'), tr(
+            `Daily prices for ${name} from ${labels[0]} to ${labels[labels.length - 1]}: low ${Math.min(...vals).toFixed(1)}, high ${Math.max(...vals).toFixed(1)}, latest ${vals[vals.length - 1].toFixed(1)} ¢/L.`,
+            `Prix quotidiens à ${name} du ${labels[0]} au ${labels[labels.length - 1]} : min ${Math.min(...vals).toFixed(1)}, max ${Math.max(...vals).toFixed(1)}, dernier ${vals[vals.length - 1].toFixed(1)} ¢/L.`));
     }
     document.getElementById('range').addEventListener('click', e => {
         const b = e.target.closest('button');
         if (!b) return;
-        years = +b.dataset.y;
-        document.querySelectorAll('#range button').forEach(x => x.classList.toggle('active', x === b));
+        months = +b.dataset.m;
+        setPressed(document.getElementById('range'), b);
         draw();
     });
     compareSel.addEventListener('change', async () => {
@@ -127,8 +131,9 @@ const eventLines = {
     draw();
 
     const byDate = Object.fromEntries(main);
+    if (!EVENTS.some(e => byDate[e[0]] != null)) document.getElementById('events').hidden = true;
     document.getElementById('events').innerHTML = `<thead><tr><th>#</th><th>${tr('Date', 'Date')}</th><th>${tr('Event', 'Événement')}</th><th class="num">${tr('Price', 'Prix')}</th></tr></thead><tbody>` +
-        EVENTS.map((e, n) => `<tr><td>${n + 1}</td><td>${fmt.date(e[0], { year: 'numeric', month: 'short', day: 'numeric' })}</td><td>${tr(e[1], e[2])}</td><td class="num">${byDate[e[0]] != null ? byDate[e[0]].toFixed(1) : '—'}</td></tr>`).join('') + '</tbody>';
+        EVENTS.map((e, n) => byDate[e[0]] == null ? '' : `<tr><td>${n + 1}</td><td>${fmt.date(e[0], { year: 'numeric', month: 'short', day: 'numeric' })}</td><td>${tr(e[1], e[2])}</td><td class="num">${byDate[e[0]] != null ? byDate[e[0]].toFixed(1) : '—'}</td></tr>`).join('') + '</tbody>';
 
     // Weekday effect
     const wd = hist.weekday;
@@ -143,6 +148,7 @@ const eventLines = {
             scales: { y: { ticks: { callback: v => v + '¢', font: CHART_FONT }, grid: GRID }, x: { ticks: { font: CHART_FONT }, grid: { display: false } } },
         },
     });
+    describeChart(document.getElementById('weekdayChart'), names.map((n, i) => `${n} ${fmt.signed(wd[days[i]].mean)} ¢/L`).join(', '));
     const best = days.reduce((a, b) => wd[b].mean < wd[a].mean ? b : a);
     const significant = Math.abs(wd[best].mean) > 2 * wd[best].se && Math.abs(wd[best].mean) >= 0.3;
     document.getElementById('weekday-text').textContent = significant

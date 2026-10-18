@@ -19,6 +19,13 @@ from .cities import CITIES, PROVINCE_NAMES, REGULATED
 HORIZONS = list(range(1, 29))   # calendar days ahead
 PROVINCES = sorted(PROVINCE_NAMES)
 
+# Feature groups that can be switched off to measure their value in the backtest.
+USE_REGIONAL_WHOLESALE = True   # western provinces use Gulf Coast gasoline instead of NY Harbor
+USE_CYCLES             = True   # price-cycle phase and province-wide moves
+
+WEST = {'BC', 'AB', 'SK', 'MB', 'YT', 'NT'}
+JUMP_CENTS = 3.0                # ex-tax daily rise that counts as a cycle "jump"
+
 _HOLIDAYS = {}
 
 
@@ -65,7 +72,9 @@ def build_features(gas, market, slug):
         f[f'gas_std_{w}'] = x.diff().rolling(w).std()
 
     # Retail tracks wholesale gasoline with a lag; the retail–wholesale margin mean-reverts.
-    rbob = market['rbob_cad_l']
+    # Western Canada's supply is priced closer to the US Gulf Coast than New York Harbor.
+    west = USE_REGIONAL_WHOLESALE and city.province in WEST
+    rbob = market['gulf_cad_l'] if west else market['rbob_cad_l']
     margin = x / (1 + taxes.components(city.province, slug, g.index[-1])['sales_rate']) - rbob
     f['rbob']   = rbob
     f['margin'] = margin
@@ -73,6 +82,7 @@ def build_features(gas, market, slug):
         f[f'margin_dev_{w}'] = margin - margin.rolling(w, min_periods=min(w, 60)).mean()
     for k in [1, 3, 7, 14]:
         f[f'rbob_chg_{k}'] = rbob - rbob.shift(k)
+    f['rbob_ma7_chg'] = rbob.rolling(7).mean() - rbob.rolling(7).mean().shift(7)
     for k in [1, 7]:
         f[f'wti_cad_chg_{k}'] = market['wti_cad'] - market['wti_cad'].shift(k)
     f['wti_cad']      = market['wti_cad']
@@ -83,6 +93,15 @@ def build_features(gas, market, slug):
     f['month']        = g.index.month
     f['holiday_in_7'] = _holiday_within(g.index, city.province, 7)
     f['regulated']    = float(city.province in REGULATED)
+
+    if USE_CYCLES:
+        # Sawtooth cycles: sharp jumps, then gradual declines. Track the phase.
+        d1 = x.diff()
+        jump = d1 >= JUMP_CENTS
+        last_jump = pd.Series(np.where(jump, np.arange(len(x)), np.nan), index=x.index).ffill()
+        f['days_since_jump'] = np.minimum(np.arange(len(x)) - last_jump, 60).fillna(60)
+        f['last_jump_size'] = d1.where(jump).ffill().fillna(0)
+
     f['province']     = PROVINCES.index(city.province)
     f['city']         = list(CITIES).index(slug)
 
@@ -99,7 +118,17 @@ def build_panel(prices, market_aligned):
         f = build_features(g, market_aligned.reindex(g.index), slug)
         f.index = pd.MultiIndex.from_product([[slug], f.index], names=['city_slug', 'date'])
         frames.append(f)
-    return pd.concat(frames)
+    panel = pd.concat(frames)
+    if USE_CYCLES:
+        # Province-wide moves at the origin (other cities' same-day prices are known by then)
+        prov = panel['province']
+        dates = panel.index.get_level_values(1)
+        for k in (1, 3, 7):
+            col = f'gas_chg_{k}'
+            med = panel.groupby([prov.values, dates])[col].transform('median')
+            panel[f'prov_chg_{k}'] = med
+        panel['gap_to_prov_7'] = panel['gas_chg_7'] - panel['prov_chg_7']
+    return panel
 
 
 def targets(prices_ex, panel_index, horizons=HORIZONS):

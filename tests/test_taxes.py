@@ -36,6 +36,14 @@ def test_scheduled_change_uses_only_announced_information(origin, expected):
     assert change[0] == pytest.approx(expected, abs=0.1)
 
 
+def test_alberta_relief_program_october_2026():
+    assert taxes.components('AB', 'calgary', '2026-09-30')['provincial'] == 13.0
+    assert taxes.components('AB', 'calgary', '2026-10-01')['provincial'] == 0.0
+    before = taxes.scheduled_change('AB', 'calgary', pd.DatetimeIndex(['2026-09-15']), 28)[0]
+    after = taxes.scheduled_change('AB', 'calgary', pd.DatetimeIndex(['2026-09-23']), 28)[0]
+    assert before == pytest.approx(0.0) and after == pytest.approx(-13.65)
+
+
 def test_breakdown_sums_to_price():
     b = taxes.breakdown(190.0, 'ON', 'toronto', '2026-10-01')
     assert sum(b.values()) == pytest.approx(190.0)

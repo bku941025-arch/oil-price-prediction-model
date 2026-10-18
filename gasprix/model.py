@@ -8,7 +8,8 @@ prediction is shrunk toward "no change" by a weight chosen on an inner validatio
 where the models can't beat persistence, the weight falls to 0.
 
 Prediction intervals and probabilities come from out-of-sample residual quantiles per
-horizon, scaled by each city's recent volatility (split-conformal).
+horizon, scaled by each city's recent volatility (split-conformal). Quantiles are fitted
+separately for calm, mid and volatile cities, so each group's ranges are calibrated.
 """
 
 import numpy as np
@@ -71,7 +72,7 @@ class DirectEnsemble:
 
     def _raw_predict(self, models, panel):
         X = panel[self.columns]
-        return {h: (r.predict(X[self.ridge_columns]) + l.predict(X)) / 2 for h, (r, l) in models.items()}
+        return {h: (r.predict(X[self.ridge_columns]) + lg.predict(X)) / 2 for h, (r, lg) in models.items()}
 
     def fit(self, panel, Y, last_date, shrink=True):
         """Fit on origins whose target date is <= last_date."""
@@ -174,25 +175,96 @@ def _q(metrics, level):
     return metrics[f'q{level:.2f}']
 
 
-def interval(long, metrics, level=INTERVAL):
-    """(low, high) arrays for each row of `long` using metrics' scaled residual quantiles."""
+VOL_GROUPS = ('calm', 'mid', 'volatile')
+
+
+def volatility_groups(panel):
+    """Assign each city to a volatility tercile by its median recent volatility."""
+    med = panel.groupby(level=0)['gas_std_28'].median()
+    return pd.qcut(med, 3, labels=VOL_GROUPS).astype(str).to_dict()
+
+
+class Calibration:
+    """Residual quantiles per horizon: one set overall and one per volatility group."""
+
+    def __init__(self, long, groups=None):
+        self.overall = metrics_by_horizon(long)
+        self.groups = groups or {}
+        self.by_group = {}
+        if groups:
+            g = long['city'].map(groups)
+            for name in VOL_GROUPS:
+                part = long[g == name]
+                if part['origin'].nunique() >= 60:   # enough history to estimate tails
+                    self.by_group[name] = metrics_by_horizon(part)
+
+    def rows(self, long):
+        """Quantile table aligned to each row of `long` (group-specific when available)."""
+        out = self.overall.reindex(long['horizon']).reset_index(drop=True)
+        if self.by_group:
+            g = long['city'].map(self.groups).reset_index(drop=True)
+            for name, m in self.by_group.items():
+                mask = (g == name).values
+                if mask.any():
+                    out.loc[mask, :] = m.reindex(long['horizon'].values[mask]).values
+        return out
+
+
+def _rows(long, calib):
+    if isinstance(calib, Calibration):
+        return calib.rows(long)
+    return calib.reindex(long['horizon']).reset_index(drop=True)
+
+
+def interval(long, calib, level=INTERVAL):
+    """(low, high) arrays for each row of `long` from scaled residual quantiles."""
     lo_q, hi_q = round((1 - level) / 2, 2), round(1 - (1 - level) / 2, 2)
-    m = metrics.reindex(long['horizon'])
+    m = _rows(long, calib)
     return (long['pred'].values + _q(m, lo_q).values * long['scale'].values,
             long['pred'].values + _q(m, hi_q).values * long['scale'].values)
 
 
-def prob_above(long, metrics, threshold):
+def prob_above(long, calib, threshold):
     """P(actual > threshold) per row, from the empirical scaled-residual distribution."""
-    m = metrics.reindex(long['horizon'])
-    qs = np.stack([_q(m, l).values for l in QUANTILE_LEVELS], axis=1)       # rows x levels
+    m = _rows(long, calib)
+    qs = np.stack([_q(m, lv).values for lv in QUANTILE_LEVELS], axis=1)     # rows x levels
     z = (np.asarray(threshold, dtype=float) - long['pred'].values) / long['scale'].values
     cdf = np.array([np.interp(zi, qrow, QUANTILE_LEVELS, left=0.0, right=1.0) for zi, qrow in zip(z, qs)])
     return np.clip(1 - cdf, 0.02, 0.98)
 
 
-def coverage(long, metrics):
-    """Share of actuals inside the intervals implied by metrics."""
-    lo, hi = interval(long, metrics)
+def coverage(long, calib, level=INTERVAL):
+    """Share of actuals inside the intervals implied by the calibration."""
+    lo, hi = interval(long, calib, level)
     a = long['actual'].values
     return float(((a >= lo) & (a <= hi)).mean())
+
+
+def crps(long, calib, center='pred'):
+    """
+    Continuous ranked probability score (approximated by the mean pinball loss over the
+    quantile grid, times 2), in ¢/L; lower is better. center='base' scores a "no change"
+    forecast with the same calibrated spread.
+    """
+    m = _rows(long, calib)
+    y, c, sc = long['actual'].values, long[center].values, long['scale'].values
+    total = 0.0
+    for lv in QUANTILE_LEVELS:
+        q = c + _q(m, lv).values * sc
+        d = y - q
+        total += np.mean(np.maximum(lv * d, (lv - 1) * d))
+    return float(2 * total / len(QUANTILE_LEVELS))
+
+
+def reliability(long, groups=None, levels=(0.5, 0.8, 0.9)):
+    """Honest coverage check: calibrate on the first half of `long`'s origins, test on the second."""
+    mid = long['origin'].min() + (long['origin'].max() - long['origin'].min()) / 2
+    cal, ev = long[long['origin'] <= mid], long[long['origin'] > mid]
+    c = Calibration(cal, groups)
+    base_cal = metrics_by_horizon(cal.assign(pred=cal['base']))
+    return {
+        'coverage': {f'{lv:.0%}': round(coverage(ev, c, lv), 3) for lv in levels},
+        'crps_model': round(crps(ev, c), 3),
+        'crps_persistence': round(crps(ev, base_cal, center='base'), 3),
+        'n': int(len(ev)),
+    }

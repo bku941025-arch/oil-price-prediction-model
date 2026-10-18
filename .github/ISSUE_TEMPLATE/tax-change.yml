@@ -1,0 +1,43 @@
+name: Tax change
+description: Report a missed, new or wrong fuel tax rate
+labels: [taxes]
+body:
+  - type: input
+    id: province
+    attributes:
+      label: Province (and city, for municipal levies)
+      placeholder: e.g. QC — Montréal
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Tax component
+      options: [Federal excise, Carbon charge, Provincial fuel tax, Municipal / transit levy, Sales tax (GST/HST/QST), Other]
+    validations:
+      required: true
+  - type: input
+    id: rate
+    attributes:
+      label: New rate (¢/L, or % for sales tax)
+    validations:
+      required: true
+  - type: input
+    id: effective
+    attributes:
+      label: Effective date
+      placeholder: YYYY-MM-DD
+    validations:
+      required: true
+  - type: input
+    id: announced
+    attributes:
+      label: Date it was announced
+      description: Forecasts made before this date must not know about the change.
+      placeholder: YYYY-MM-DD
+  - type: input
+    id: source
+    attributes:
+      label: Official source (link)
+    validations:
+      required: true

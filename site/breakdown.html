@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title data-en="What's in the Price — GasPrix MTL" data-fr="Composantes du prix — GasPrix MTL">What's in the Price — GasPrix MTL</title>
+    <title data-en="What's in the Price — PumpCast" data-fr="Composantes du prix — PumpCast">What's in the Price — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#2c5f8a">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
@@ -39,8 +39,8 @@
 
     <div class="card">
         <div class="card-header">
-            <h2 class="card-title" data-en="Two years of price components" data-fr="Deux ans de composantes du prix"></h2>
-            <p class="card-subtitle" data-en="Weekly. Drops in the tax layers show the 2025 carbon charge removal (outside Québec) and the 2026 federal excise suspension." data-fr="Hebdomadaire. Les baisses des couches de taxes montrent l'abolition de la redevance carbone en 2025 (hors Québec) et la suspension de la taxe d'accise fédérale en 2026."></p>
+            <h2 class="card-title" data-en="A year of price components" data-fr="Un an de composantes du prix"></h2>
+            <p class="card-subtitle" data-en="Weekly. The drop in the fuel-tax layer in April 2026 is the federal excise suspension." data-fr="Hebdomadaire. La baisse de la couche des taxes sur les carburants en avril 2026 correspond à la suspension de la taxe d'accise fédérale."></p>
         </div>
         <div class="chart-container" style="height:380px"><canvas id="stack"></canvas></div>
     </div>
@@ -106,6 +106,9 @@ const PARTS = [
         </tbody>`;
 
     // Stacked chart
+    describeChart(document.getElementById('stack'), tr(
+        `Weekly price components for ${city.name} over the past year. Latest: ${PARTS.map(([k, , en]) => `${en} ${last[k].toFixed(1)}`).join(', ')} ¢/L.`,
+        `Composantes hebdomadaires du prix à ${city.name} sur la dernière année. Dernière : ${PARTS.map(([k, , , fr]) => `${fr} ${last[k].toFixed(1)}`).join(', ')} ¢/L.`));
     new Chart(document.getElementById('stack').getContext('2d'), {
         type: 'line',
         data: {

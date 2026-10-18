@@ -9,7 +9,7 @@ Every channel is off unless its environment variables are set:
 """
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.utils import format_datetime
 from xml.sax.saxutils import escape
 
@@ -46,13 +46,13 @@ def rss(title, link, description, items):
     return (f'<?xml version="1.0" encoding="UTF-8"?>\n<rss version="2.0"><channel>'
             f'<title>{escape(title)}</title><link>{escape(link)}</link>'
             f'<description>{escape(description)}</description>'
-            f'<lastBuildDate>{format_datetime(datetime.now(timezone.utc))}</lastBuildDate>'
+            f'<lastBuildDate>{format_datetime(datetime.now(UTC))}</lastBuildDate>'
             f'{body}</channel></rss>\n')
 
 
 def city_feed(site, previous_items=()):
     """Daily item for one city, keeping the last 30 days of items."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     item = {'title': f"{site['name']} — {site['data_end']}: {SIGNAL_TEXT[site['signal']['kind']][0]}",
             'link': f"{SITE_URL}/?city={site['city']}", 'description': summary_line(site),
             'guid': f"{site['city']}-{site['data_end']}", 'date': now}
@@ -100,7 +100,7 @@ def post_bluesky(text):
         sess = s.json()
         url_start = text.find(SITE_URL)
         record = {'$type': 'app.bsky.feed.post', 'text': text,
-                  'createdAt': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')}
+                  'createdAt': datetime.now(UTC).isoformat().replace('+00:00', 'Z')}
         if url_start >= 0:   # make the link clickable (facets use UTF-8 byte offsets)
             b0 = len(text[:url_start].encode())
             record['facets'] = [{'index': {'byteStart': b0, 'byteEnd': b0 + len(SITE_URL.encode())},

@@ -1,0 +1,20 @@
+name: Bug report
+description: Something on the site or in the pipeline is broken or wrong
+labels: [bug]
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Page or URL
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: city
+    attributes:
+      label: City, language and device/browser

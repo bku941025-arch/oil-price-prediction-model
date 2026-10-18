@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title data-en="Track Record — GasPrix MTL" data-fr="Fiabilité — GasPrix MTL">Track Record — GasPrix MTL</title>
+    <title data-en="Track Record — PumpCast" data-fr="Fiabilité — PumpCast">Track Record — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#2c5f8a">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
@@ -92,6 +92,12 @@
         { label: tr('Forecast made 7 days earlier', 'Prévision faite 7 jours plus tôt'), data: t.map(r => r.pred ?? null), color: '#e07b39', dash: [4, 3],
           band: [t.map(r => r.low ?? null), t.map(r => r.high ?? null)], bandColor: 'rgba(224,123,57,0.12)' },
     ]);
+
+    const scored = t.filter(r => r.pred != null && r.actual != null);
+    const err = scored.reduce((a, r) => a + Math.abs(r.actual - r.pred), 0) / Math.max(scored.length, 1);
+    describeChart(document.getElementById('trackChart'), tr(
+        `Actual prices vs forecasts made 7 days earlier for ${city.name} over the last ${t.length} days; average gap ${err.toFixed(1)} ¢/L.`,
+        `Prix réels vs prévisions faites 7 jours plus tôt pour ${city.name} sur les ${t.length} derniers jours; écart moyen ${err.toFixed(1)} ¢/L.`));
 
     // Holdout table (this city, and all cities)
     const M = index.model;

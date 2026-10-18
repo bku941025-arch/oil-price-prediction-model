@@ -1,6 +1,6 @@
 {
-  "name": "GasPrix — Gas Price Forecasts",
-  "short_name": "GasPrix",
+  "name": "PumpCast — Canadian Gas Price Forecasts",
+  "short_name": "PumpCast",
   "description": "28-day gas price forecasts for 77 Canadian cities, with a best-day-to-fill-up pick.",
   "start_url": "./index.html",
   "scope": "./",
