@@ -1,0 +1,56 @@
+{
+ "generated_at": "2026-10-17 19:47",
+ "default_city": "montreal",
+ "cities": [
+  {
+   "slug": "montreal",
+   "name": "Montréal",
+   "today_price": 192.3,
+   "data_end": "2026-10-16",
+   "signal": {
+    "kind": "steady",
+    "change_3d": -0.6
+   }
+  },
+  {
+   "slug": "quebec",
+   "name": "Québec",
+   "today_price": 191.6,
+   "data_end": "2026-10-16",
+   "signal": {
+    "kind": "steady",
+    "change_3d": -0.3
+   }
+  },
+  {
+   "slug": "gatineau",
+   "name": "Gatineau",
+   "today_price": 184.1,
+   "data_end": "2026-10-16",
+   "signal": {
+    "kind": "steady",
+    "change_3d": -1.7
+   }
+  },
+  {
+   "slug": "sherbrooke",
+   "name": "Sherbrooke",
+   "today_price": 192.9,
+   "data_end": "2026-10-16",
+   "signal": {
+    "kind": "steady",
+    "change_3d": -0.1
+   }
+  },
+  {
+   "slug": "trois-rivieres",
+   "name": "Trois-Rivières",
+   "today_price": 192.0,
+   "data_end": "2026-10-16",
+   "signal": {
+    "kind": "steady",
+    "change_3d": -0.0
+   }
+  }
+ ]
+}

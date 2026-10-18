@@ -4,9 +4,20 @@ on:
   schedule:
     - cron: '0 13 * * *'   # Every day at 8:00 AM EST (13:00 UTC)
   workflow_dispatch:        # Allow manual trigger from GitHub UI
+    inputs:
+      force_publish:
+        description: 'Publish even if the accuracy gate fails'
+        type: boolean
+        default: false
 
 permissions:
-  contents: write           # Needed to push updated files back to repo
+  contents: write           # Push updated forecasts back to the repo
+  pages: write              # Deploy the site to GitHub Pages
+  id-token: write
+
+concurrency:
+  group: daily-pipeline
+  cancel-in-progress: false
 
 jobs:
   run-pipeline:
@@ -15,32 +26,47 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: pip
 
       - name: Install dependencies
-        run: pip install pandas numpy scikit-learn==1.9.1 lightgbm==4.7.0 joblib requests openpyxl  # keep in sync with requirements.txt
+        # Keep versions in sync with requirements.txt
+        run: pip install pandas numpy scikit-learn==1.9.1 lightgbm==4.7.0 holidays==0.106 requests openpyxl
 
       - name: Run pipeline
+        # Fails (and publishes nothing) if data is stale or accuracy drops sharply
         env:
-          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          FORCE_PUBLISH: ${{ inputs.force_publish && '1' || '' }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          SITE_URL: ${{ vars.SITE_URL }}
         run: python pipeline.py
 
       - name: Commit and push updated files
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Data/montreal_gas_ml_ready.csv
-          git add Data/forecast_28day.csv
-          git add Data/forecast_weekly.csv
-          git add webapp/model_ridge.pkl
-          git add webapp/model_lgbm.pkl
-          git add webapp/scaler.pkl
-          git add webapp/retrain_log.json
+          git add site/data Data/predictions_log.csv Data/metrics.json
           git diff --staged --quiet || git commit -m "Auto-update: $(date +'%Y-%m-%d') pipeline run"
           git push
+
+      - name: Upload site for GitHub Pages
+        if: vars.DEPLOY_PAGES == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy-pages:
+    needs: run-pipeline
+    if: vars.DEPLOY_PAGES == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

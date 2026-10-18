@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="Trip Cost — GasPrix MTL" data-fr="Coût du trajet — GasPrix MTL">Trip Cost — GasPrix MTL</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="Trip & Commute Cost" data-fr="Coût du trajet et du navettage"></h1>
+        <p class="page-subtitle" data-en="What a drive will cost at the forecast price on the day you fill up" data-fr="Ce que coûtera un trajet au prix prévu le jour où vous faites le plein"></p>
+    </div>
+
+    <div class="card card-narrow">
+        <div class="form-grid">
+            <div>
+                <label class="input-label" for="km" data-en="Distance (km, one way)" data-fr="Distance (km, aller simple)"></label>
+                <input type="number" id="km" class="spend-input" value="25" min="0" step="1">
+            </div>
+            <div>
+                <label class="input-label" for="eff" data-en="Fuel use (L/100 km)" data-fr="Consommation (L/100 km)"></label>
+                <input type="number" id="eff" class="spend-input" value="8.5" min="1" max="40" step="0.1">
+            </div>
+            <div>
+                <label class="input-label" for="trips" data-en="Trips per month" data-fr="Trajets par mois"></label>
+                <input type="number" id="trips" class="spend-input" value="20" min="1" max="200" step="1">
+            </div>
+            <div>
+                <label class="input-label" for="day" data-en="Fill-up day" data-fr="Jour du plein"></label>
+                <select id="day" class="spend-input"></select>
+            </div>
+        </div>
+        <label class="checkbox-row"><input type="checkbox" id="round" checked> <span data-en="Round trip" data-fr="Aller-retour"></span></label>
+
+        <div class="metric-grid" style="margin-top:1.5rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+            <div class="metric">
+                <div class="metric-label" data-en="Per trip" data-fr="Par trajet"></div>
+                <div class="metric-value" id="per-trip">—</div>
+                <div class="metric-note" id="per-trip-range"></div>
+            </div>
+            <div class="metric">
+                <div class="metric-label" data-en="Per month" data-fr="Par mois"></div>
+                <div class="metric-value" id="per-month">—</div>
+                <div class="metric-note" id="per-month-range"></div>
+            </div>
+            <div class="metric">
+                <div class="metric-label" data-en="Fuel needed / month" data-fr="Essence requise / mois"></div>
+                <div class="metric-value" id="litres">—</div>
+                <div class="metric-note" id="price-used"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="disclaimer card-narrow">
+        <p data-en="Typical fuel use: compact car 6–7, mid-size sedan 7–9, SUV/minivan 9–12, pickup 12–15 L/100 km. Check Natural Resources Canada's Fuel Consumption Guide for your model."
+           data-fr="Consommation typique : compacte 6–7, intermédiaire 7–9, VUS/fourgonnette 9–12, camionnette 12–15 L/100 km. Consultez le Guide de consommation de carburant de Ressources naturelles Canada pour votre modèle."></p>
+    </div>
+</main>
+
+<script>
+(async () => {
+    let city;
+    try {
+        ({ city } = await loadPage());
+    } catch (e) {
+        return showError(document.querySelector('.card'), e);
+    }
+    const day = document.getElementById('day');
+    day.add(new Option(tr(`Today (${city.today_price.toFixed(1)} ¢/L)`, `Aujourd'hui (${city.today_price.toFixed(1)} ¢/L)`), 'today'));
+    city.forecast.forEach((f, i) => day.add(new Option(`${fmt.date(f.date, { weekday: 'short', month: 'short', day: 'numeric' })} (${f.mid.toFixed(1)} ¢/L)`, i)));
+
+    const num = id => Math.max(parseFloat(document.getElementById(id).value) || 0, 0);
+    function update() {
+        const f = day.value === 'today' ? { low: city.today_price, mid: city.today_price, high: city.today_price } : city.forecast[+day.value];
+        const litresTrip = num('km') * (document.getElementById('round').checked ? 2 : 1) * num('eff') / 100;
+        const trips = Math.max(num('trips'), 1);
+        const cost = p => litresTrip * p / 100;
+        document.getElementById('per-trip').textContent = fmt.money(cost(f.mid));
+        document.getElementById('per-month').textContent = fmt.money(cost(f.mid) * trips);
+        const range = (a, b) => f.low === f.high ? '' : `${fmt.money(a)} – ${fmt.money(b)}`;
+        document.getElementById('per-trip-range').textContent = range(cost(f.low), cost(f.high));
+        document.getElementById('per-month-range').textContent = range(cost(f.low) * trips, cost(f.high) * trips);
+        document.getElementById('litres').textContent = (litresTrip * trips).toFixed(0) + ' L';
+        document.getElementById('price-used').textContent = tr(`at ${f.mid.toFixed(1)} ¢/L`, `à ${f.mid.toFixed(1)} ¢/L`);
+    }
+    document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', update));
+    update();
+})();
+</script>
+</body>
+</html>

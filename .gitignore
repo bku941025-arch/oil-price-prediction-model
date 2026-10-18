@@ -17,3 +17,6 @@ Data/Daily*.xlsx
 
 # Logs
 *.log
+
+# Local venv
+.venv/

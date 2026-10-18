@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="Best Day to Fill Up — GasPrix MTL" data-fr="Meilleur jour — GasPrix MTL">Best Day to Fill Up — GasPrix MTL</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="Best Day to Fill Up" data-fr="Meilleur jour pour faire le plein"></h1>
+        <p class="page-subtitle" data-en="7-day forecast to help you pick the cheapest day to fill your tank" data-fr="Prévision sur 7 jours pour choisir le jour le moins cher pour faire le plein"></p>
+    </div>
+
+    <div class="card" style="border-left: 4px solid var(--accent);">
+        <div id="rec" class="loading-msg" data-en="Loading..." data-fr="Chargement..."></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="7-Day Price Forecast" data-fr="Prévision sur 7 jours"></h2>
+            <p class="card-subtitle" data-en="Kalibrate reports weekday prices, so weekend forecasts carry Friday's level. Ranges are 80% intervals." data-fr="Kalibrate publie les prix en semaine; les prévisions de fin de semaine reprennent le niveau du vendredi. Fourchettes à 80 %."></p>
+        </div>
+        <div id="days-grid" class="days-grid"></div>
+    </div>
+
+    <div class="card card-narrow">
+        <div class="card-header">
+            <h2 class="card-title" data-en="Your Tank Size" data-fr="Taille de votre réservoir"></h2>
+        </div>
+        <div class="input-row">
+            <input type="number" id="tank-input" class="spend-input" value="50" min="10" max="150" step="5" aria-label="Tank size">
+            <span style="color:var(--mid)">L</span>
+        </div>
+    </div>
+</main>
+
+<script>
+let fc = null, today = null;
+
+function renderSavings() {
+    const tank = Math.min(Math.max(parseFloat(document.getElementById('tank-input').value) || 50, 1), 300);
+    const best = fc.reduce((a, b) => (b.mid < a.mid ? b : a));
+    const worst = fc.reduce((a, b) => (b.mid > a.mid ? b : a));
+    const save = (worst.mid - best.mid) / 100 * tank;
+    const vsToday = (today - best.mid) / 100 * tank;
+    const rec = document.getElementById('rec');
+    rec.className = '';
+    const flat = worst.mid - best.mid < 1;
+    rec.innerHTML = `
+        <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:1.5rem;">
+            <div>
+                <div class="metric-label" style="color:var(--accent)">${tr('🏆 Best day to fill up', '🏆 Meilleur jour pour faire le plein')}</div>
+                <div class="big-figure">${flat ? tr('Any day this week', "N'importe quel jour cette semaine") : fmt.date(best.date, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+                <div style="color:var(--mid)">${best.mid.toFixed(1)} ¢/L (${best.low.toFixed(1)} – ${best.high.toFixed(1)})</div>
+            </div>
+            <div style="text-align:right">
+                <div class="metric-label">${tr('Expected savings vs priciest day', 'Économies prévues vs jour le plus cher')}</div>
+                <div class="big-figure" style="color:var(--green)">${fmt.money(save)}</div>
+                <div style="font-size:0.82rem; color:var(--light)">${tr(`on a ${tank} L fill-up`, `sur un plein de ${tank} L`)}${vsToday > 0.005 ? tr(` · ${fmt.money(vsToday)} vs today`, ` · ${fmt.money(vsToday)} vs aujourd'hui`) : ''}</div>
+            </div>
+        </div>`;
+    return { best, worst };
+}
+
+(async () => {
+    try {
+        const { city } = await loadPage();
+        fc = city.forecast.slice(0, 7);
+        today = city.today_price;
+        const { best, worst } = renderSavings();
+        const grid = document.getElementById('days-grid');
+        for (const d of fc) {
+            const vs = d.mid - today;
+            const cls = vs > 0.5 ? 'up' : vs < -0.5 ? 'down' : 'flat';
+            const isBest = d.date === best.date && worst.mid - best.mid >= 1;
+            const isWorst = d.date === worst.date && worst.mid - best.mid >= 1;
+            const card = document.createElement('div');
+            card.className = `day-card${isBest ? ' best' : isWorst ? ' worst' : ''}`;
+            card.innerHTML = `
+                ${isBest ? `<div class="day-badge best">${tr('✓ Best', '✓ Mieux')}</div>` : ''}
+                ${isWorst ? `<div class="day-badge worst">${tr('Priciest', 'Plus cher')}</div>` : ''}
+                <div class="day-name">${weekdayName(d.date)}</div>
+                <div class="day-date">${fmt.date(d.date)}</div>
+                <div class="day-price">${d.mid.toFixed(1)}¢</div>
+                <div class="day-range">${d.low.toFixed(1)} – ${d.high.toFixed(1)}</div>
+                <span class="day-vs ${cls}">${cls === 'flat' ? tr('≈ today', "≈ auj.") : fmt.signed(vs) + '¢'}</span>`;
+            grid.appendChild(card);
+        }
+        document.getElementById('tank-input').addEventListener('input', renderSavings);
+    } catch (e) {
+        showError(document.getElementById('rec'), e);
+    }
+})();
+</script>
+</body>
+</html>

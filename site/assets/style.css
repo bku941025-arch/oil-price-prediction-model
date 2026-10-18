@@ -64,6 +64,18 @@ body {
 
 .brand-mtl { color: var(--accent); }
 
+.city-select {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--dark);
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    padding: 0.3rem 0.5rem;
+    background: var(--white);
+    margin-left: 0.75rem;
+}
+
 .nav-links {
     display: flex;
     gap: 0.25rem;
@@ -478,5 +490,84 @@ body {
 
 @media (max-width: 480px) {
     .weekly-grid        { grid-template-columns: 1fr 1fr; }
-    .nav-links          { display: none; }
+    .metric-grid        { grid-template-columns: 1fr 1fr; }
 }
+
+@media (max-width: 860px) {
+    .navbar             { flex-wrap: wrap; height: auto; padding-block: 0.6rem; row-gap: 0.4rem; }
+    .nav-links          { order: 3; width: 100%; overflow-x: auto; scrollbar-width: none; }
+    .nav-link           { white-space: nowrap; padding: 0.35rem 0.6rem; }
+}
+
+/* ── Signal banner ──────────────────────────────────────────────────────────── */
+.signal {
+    display: flex;
+    gap: 0.9rem;
+    align-items: center;
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius);
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border);
+    background: var(--white);
+}
+.signal-icon  { font-size: 1.6rem; }
+.signal-title { font-weight: 600; color: var(--black); }
+.signal-text  { font-size: 0.85rem; color: var(--mid); }
+.signal.fill_now { background: var(--orange-lt); border-color: #f5d4bc; }
+.signal.wait     { background: var(--green-lt);  border-color: #b8e8d0; }
+
+/* ── Metric tiles ───────────────────────────────────────────────────────────── */
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+.metric {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1rem;
+}
+.metric-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--light); margin-bottom: 0.3rem; }
+.metric-value { font-family: 'DM Serif Display', serif; font-size: 1.5rem; color: var(--black); }
+.metric-note  { font-size: 0.75rem; color: var(--mid); margin-top: 0.2rem; }
+.better { color: var(--green); font-weight: 600; }
+.worse  { color: #c0392b; font-weight: 600; }
+
+/* ── Best-day grid ──────────────────────────────────────────────────────────── */
+.days-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.75rem; }
+.day-card {
+    border-radius: var(--radius);
+    padding: 1rem 0.75rem;
+    text-align: center;
+    border: 1.5px solid var(--border);
+    position: relative;
+}
+.day-card.best  { border-color: var(--green); background: var(--green-lt); }
+.day-card.worst { border-color: var(--orange); background: var(--orange-lt); }
+.day-name  { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--light); margin-bottom: 0.4rem; font-weight: 600; }
+.day-date  { font-size: 0.7rem; color: var(--light); margin-bottom: 0.6rem; }
+.day-price { font-family: 'DM Serif Display', serif; font-size: 1.4rem; color: var(--black); margin-bottom: 0.2rem; }
+.day-range { font-size: 0.68rem; color: var(--light); margin-bottom: 0.4rem; }
+.day-vs    { font-size: 0.72rem; font-weight: 600; padding: 0.15rem 0.45rem; border-radius: 4px; display: inline-block; }
+.day-vs.up   { background: var(--orange-lt); color: #c0502a; }
+.day-vs.down { background: var(--green-lt); color: #2a7a50; }
+.day-vs.flat { background: var(--bg); color: var(--mid); }
+.day-badge {
+    position: absolute; top: -9px; left: 50%; transform: translateX(-50%);
+    font-size: 0.65rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 10px; white-space: nowrap; color: #fff;
+}
+.day-badge.best  { background: var(--green); }
+.day-badge.worst { background: var(--orange); }
+.big-figure { font-family: 'DM Serif Display', serif; font-size: 2.2rem; color: var(--black); }
+
+@media (max-width: 700px) { .days-grid { grid-template-columns: repeat(4, 1fr); } .metric-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 420px) { .days-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ── Forms ──────────────────────────────────────────────────────────────────── */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
+.form-grid .spend-input, .form-grid select { max-width: none; width: 100%; }
+select.spend-input { appearance: auto; }
+.checkbox-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; color: var(--dark); }
+.field-error { color: #c0392b; font-size: 0.85rem; margin-top: 0.5rem; }
+code { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.05rem 0.35rem; font-size: 0.85em; }
