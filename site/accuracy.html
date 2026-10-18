@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="Track Record — GasPrix MTL" data-fr="Fiabilité — GasPrix MTL">Track Record — GasPrix MTL</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="How Wrong Were We?" data-fr="À quel point nous sommes-nous trompés?"></h1>
+        <p class="page-subtitle" data-en="Every forecast is logged and scored against the price that actually happened." data-fr="Chaque prévision est enregistrée et comparée au prix réellement observé."></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="Live forecasts" data-fr="Prévisions en direct"></h2>
+            <p class="card-subtitle" id="live-sub"></p>
+        </div>
+        <div class="metric-grid" id="live-grid"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="7-Day-Ahead Forecasts vs Actual Prices" data-fr="Prévisions à 7 jours vs prix réels"></h2>
+            <p class="card-subtitle" id="track-sub"></p>
+        </div>
+        <div class="chart-container"><canvas id="trackChart"></canvas></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="Out-of-sample test, past year" data-fr="Test hors échantillon, année passée"></h2>
+            <p class="card-subtitle" data-en="The model is retrained without the most recent year, then scored on it. “No change” is the naive guess that the price stays where it is."
+               data-fr="Le modèle est réentraîné sans l'année la plus récente, puis évalué sur celle-ci. « Aucun changement » suppose que le prix reste le même."></p>
+        </div>
+        <div class="table-wrapper">
+            <table class="history-table" id="holdout-table"></table>
+        </div>
+    </div>
+</main>
+
+<script>
+(async () => {
+    let city;
+    try {
+        ({ city } = await loadPage());
+    } catch (e) {
+        return showError(document.getElementById('live-grid'), e);
+    }
+
+    // Live accuracy
+    const L = city.live_accuracy;
+    const grid = document.getElementById('live-grid');
+    const tile = (label, value, note) => `<div class="metric"><div class="metric-label">${label}</div><div class="metric-value">${value}</div><div class="metric-note">${note || ''}</div></div>`;
+    const cmp = (m, p) => m == null || p == null ? '' :
+        `<span class="${m <= p ? 'better' : 'worse'}">${tr('no change', 'aucun chang.')}: ±${p.toFixed(2)}</span>`;
+    if (!L.mae_1 && !L.mae_7) {
+        document.getElementById('live-sub').textContent = tr(
+            'Live scoring starts once logged forecasts reach their target dates. Until then, the chart below shows backtest forecasts.',
+            "L'évaluation en direct commence lorsque les prévisions enregistrées atteignent leur date cible. D'ici là, le graphique montre des prévisions rétrospectives.");
+        grid.innerHTML = tile(tr('Scored forecasts', 'Prévisions évaluées'), L.n);
+    } else {
+        document.getElementById('live-sub').textContent = tr(
+            `Forecasts made by the live pipeline since ${L.since}, scored over the last ${L.window_days} days.`,
+            `Prévisions du pipeline en direct depuis le ${L.since}, évaluées sur les ${L.window_days} derniers jours.`);
+        grid.innerHTML =
+            tile(tr('1-day error', 'Erreur à 1 jour'), L.mae_1 != null ? `±${L.mae_1.toFixed(2)}` : '—', cmp(L.mae_1, L.persistence_mae_1)) +
+            tile(tr('7-day error', 'Erreur à 7 jours'), L.mae_7 != null ? `±${L.mae_7.toFixed(2)}` : '—', cmp(L.mae_7, L.persistence_mae_7)) +
+            tile(tr('Inside 80% range', 'Dans la fourchette 80 %'), L.coverage != null ? `${Math.round(L.coverage * 100)}%` : '—', tr('target: 80%', 'cible : 80 %')) +
+            tile(tr('Scored forecasts', 'Prévisions évaluées'), L.n);
+    }
+
+    // Track record chart
+    const t = city.track_record;
+    const liveFrom = t.findIndex(r => r.source === 'live');
+    document.getElementById('track-sub').textContent = tr(
+        `Each orange point is what we predicted 7 days earlier. ${liveFrom >= 0 ? `Live forecasts from ${t[liveFrom].date}; earlier points` : 'All points shown'} are backtest forecasts from a model that hadn't seen that period.`,
+        `Chaque point orange est notre prévision faite 7 jours plus tôt. ${liveFrom >= 0 ? `Prévisions en direct à partir du ${t[liveFrom].date}; les points antérieurs` : 'Tous les points'} sont des prévisions rétrospectives d'un modèle n'ayant pas vu cette période.`);
+    bandChart(document.getElementById('trackChart'), t.map(r => r.date), [
+        { label: tr('Actual price', 'Prix réel'), data: t.map(r => r.actual), color: '#2c5f8a' },
+        { label: tr('Forecast made 7 days earlier', 'Prévision faite 7 jours plus tôt'), data: t.map(r => r.pred ?? null), color: '#e07b39', dash: [4, 3],
+          band: [t.map(r => r.low ?? null), t.map(r => r.high ?? null)], bandColor: 'rgba(224,123,57,0.12)' },
+    ]);
+
+    // Holdout table
+    const H = city.holdout, rows = [1, 3, 7, 14, 21, 28];
+    const pct = v => v == null ? '—' : Math.round(v * 100) + '%';
+    document.getElementById('holdout-table').innerHTML = `
+        <thead><tr>
+            <th>${tr('Days ahead', 'Jours à l\'avance')}</th>
+            <th>${tr('Model error', 'Erreur du modèle')}</th>
+            <th>${tr('“No change” error', 'Erreur « aucun changement »')}</th>
+            <th>${tr('Improvement', 'Amélioration')}</th>
+            <th>${tr('Direction right', 'Bonne direction')}</th>
+        </tr></thead>
+        <tbody>${rows.map(h => {
+            const m = H.mae[h], p = H.persistence_mae[h], imp = (1 - m / p) * 100;
+            return `<tr><td>${h}</td><td>±${m.toFixed(2)} ¢/L</td><td>±${p.toFixed(2)} ¢/L</td>
+                <td class="${imp > 0.5 ? 'better' : imp < -0.5 ? 'worse' : ''}">${imp > 0.5 || imp < -0.5 ? (imp > 0 ? '+' : '') + imp.toFixed(0) + '%' : '≈'}</td>
+                <td>${H.directional_acc[h] == null ? tr('no call', 'aucun signal') : pct(H.directional_acc[h])}</td></tr>`;
+        }).join('')}</tbody>`;
+})();
+</script>
+</body>
+</html>

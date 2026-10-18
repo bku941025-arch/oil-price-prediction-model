@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="Budget — GasPrix MTL" data-fr="Budget — GasPrix MTL">Budget — GasPrix MTL</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="Monthly Budget Estimator" data-fr="Estimateur de budget mensuel"></h1>
+        <p class="page-subtitle" data-en="Enter last month's gas spend to estimate next month's budget" data-fr="Entrez vos dépenses en essence du mois dernier pour estimer votre budget du mois prochain"></p>
+    </div>
+
+    <div class="card card-narrow">
+        <form id="budget-form" class="input-group" novalidate>
+            <label class="input-label" for="spend-input" data-en="Amount spent on gas last month (CAD $)" data-fr="Montant dépensé en essence le mois dernier (CAD $)"></label>
+            <div class="input-row">
+                <span class="input-prefix">$</span>
+                <input type="number" id="spend-input" class="spend-input" min="1" step="0.01" data-en-placeholder="e.g. 160" data-fr-placeholder="ex. 160">
+                <button class="btn-primary" type="submit" data-en="Calculate" data-fr="Calculer"></button>
+            </div>
+            <div class="field-error" id="spend-error" hidden data-en="Please enter an amount greater than 0." data-fr="Veuillez entrer un montant supérieur à 0."></div>
+        </form>
+
+        <div id="result" hidden>
+            <div class="consumption-summary">
+                <div class="consumption-item">
+                    <span class="consumption-label" data-en="Last 30 days avg price" data-fr="Prix moy. 30 derniers jours"></span>
+                    <span class="consumption-value" id="last-avg">—</span>
+                </div>
+                <div class="consumption-item">
+                    <span class="consumption-label" data-en="Implied consumption" data-fr="Consommation estimée"></span>
+                    <span class="consumption-value" id="litres">—</span>
+                </div>
+                <div class="consumption-item">
+                    <span class="consumption-label" data-en="Next 4 weeks avg price" data-fr="Prix moyen des 4 prochaines semaines"></span>
+                    <span class="consumption-value" id="fc-avg">—</span>
+                </div>
+            </div>
+            <div class="budget-grid">
+                <div class="budget-card budget-optimistic">
+                    <div class="budget-scenario" data-en="Low" data-fr="Bas"></div>
+                    <div class="budget-amount" id="b-low">—</div>
+                    <div class="budget-note" data-en="If prices track the low end" data-fr="Si les prix suivent le bas de la fourchette"></div>
+                </div>
+                <div class="budget-card budget-expected">
+                    <div class="budget-scenario" data-en="Expected" data-fr="Attendu"></div>
+                    <div class="budget-amount" id="b-mid">—</div>
+                    <div class="budget-note" data-en="Central forecast" data-fr="Prévision centrale"></div>
+                </div>
+                <div class="budget-card budget-conservative">
+                    <div class="budget-scenario" data-en="High" data-fr="Élevé"></div>
+                    <div class="budget-amount" id="b-high">—</div>
+                    <div class="budget-note" data-en="If prices track the high end" data-fr="Si les prix suivent le haut de la fourchette"></div>
+                </div>
+            </div>
+            <div class="recommendation" id="recommendation"></div>
+        </div>
+    </div>
+
+    <div class="disclaimer card-narrow">
+        <p data-en="⚠️ Assumes you drive about as much as last month. Low/high use the 80% forecast range averaged over the next 4 weeks; market shocks or policy changes can push prices outside it."
+           data-fr="⚠️ Suppose que vous conduisez autant que le mois dernier. Bas/élevé utilisent la fourchette de prévision à 80 % moyennée sur 4 semaines; des chocs de marché ou des changements de politique peuvent la dépasser."></p>
+    </div>
+</main>
+
+<script>
+(async () => {
+    let city;
+    try {
+        ({ city } = await loadPage());
+    } catch (e) {
+        return showError(document.getElementById('budget-form'), e);
+    }
+    const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+    const lastAvg = mean(city.historical.slice(-30).map(h => h.price));
+    const fcLow = mean(city.forecast.map(f => f.low));
+    const fcMid = mean(city.forecast.map(f => f.mid));
+    const fcHigh = mean(city.forecast.map(f => f.high));
+
+    document.getElementById('budget-form').addEventListener('submit', e => {
+        e.preventDefault();
+        const spend = parseFloat(document.getElementById('spend-input').value);
+        const bad = !(spend > 0 && isFinite(spend));
+        document.getElementById('spend-error').hidden = !bad;
+        if (bad) return;
+
+        const litres = spend / (lastAvg / 100);
+        const [lo, mid, hi] = [fcLow, fcMid, fcHigh].map(p => litres * p / 100);
+        document.getElementById('last-avg').textContent = fmt.cents(lastAvg);
+        document.getElementById('litres').textContent = litres.toFixed(0) + ' L';
+        document.getElementById('fc-avg').textContent = `${fcMid.toFixed(1)} ¢/L`;
+        document.getElementById('b-low').textContent = fmt.money(lo);
+        document.getElementById('b-mid').textContent = fmt.money(mid);
+        document.getElementById('b-high').textContent = fmt.money(hi);
+        const diff = mid - spend;
+        document.getElementById('recommendation').textContent = tr(
+            `💡 Budget ${fmt.dollars(mid)} (between ${fmt.dollars(lo)} and ${fmt.dollars(hi)}) — ${Math.abs(diff) < 1 ? 'about the same as' : diff > 0 ? fmt.money(diff) + ' more than' : fmt.money(-diff) + ' less than'} last month.`,
+            `💡 Prévoyez ${fmt.dollars(mid)} (entre ${fmt.dollars(lo)} et ${fmt.dollars(hi)}) — ${Math.abs(diff) < 1 ? 'environ comme' : diff > 0 ? fmt.money(diff) + ' de plus que' : fmt.money(-diff) + ' de moins que'} le mois dernier.`);
+        document.getElementById('result').hidden = false;
+    });
+})();
+</script>
+</body>
+</html>
