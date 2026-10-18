@@ -12,10 +12,10 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          python-version: '3.11'
+          python-version-file: '.python-version'
           cache: pip
       - run: pip install -r requirements.txt
       - name: Download current workbooks
@@ -28,7 +28,7 @@ jobs:
               for year in (y - 1, y):
                   data.download_kalibrate(year, p)
           "
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: kalibrate-${{ github.run_id }}
           path: Data/*.xlsx
