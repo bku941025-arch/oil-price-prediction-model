@@ -20,3 +20,5 @@ Data/Daily*.xlsx
 
 # Local venv
 .venv/
+Data/Premium*.xlsx
+Data/Diesel*.xlsx

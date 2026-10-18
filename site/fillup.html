@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-en="Best Day to Fill Up — GasPrix MTL" data-fr="Meilleur jour — GasPrix MTL">Best Day to Fill Up — GasPrix MTL</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
@@ -22,8 +26,11 @@
 
     <div class="card">
         <div class="card-header">
-            <h2 class="card-title" data-en="7-Day Price Forecast" data-fr="Prévision sur 7 jours"></h2>
-            <p class="card-subtitle" data-en="Kalibrate reports weekday prices, so weekend forecasts carry Friday's level. Ranges are 80% intervals." data-fr="Kalibrate publie les prix en semaine; les prévisions de fin de semaine reprennent le niveau du vendredi. Fourchettes à 80 %."></p>
+            <div class="card-header-row">
+                <h2 class="card-title" data-en="7-Day Price Forecast" data-fr="Prévision sur 7 jours"></h2>
+                <div class="seg" id="product-toggle"></div>
+            </div>
+            <p class="card-subtitle" data-en="Kalibrate reports weekday prices only, so weekends aren't recommended: their values just repeat Friday. Ranges are 80% intervals." data-fr="Kalibrate publie seulement les prix en semaine; les fins de semaine ne sont donc pas recommandées, car elles reprennent le vendredi. Fourchettes à 80 %."></p>
         </div>
         <div id="days-grid" class="days-grid"></div>
     </div>
@@ -44,8 +51,9 @@ let fc = null, today = null;
 
 function renderSavings() {
     const tank = Math.min(Math.max(parseFloat(document.getElementById('tank-input').value) || 50, 1), 300);
-    const best = fc.reduce((a, b) => (b.mid < a.mid ? b : a));
-    const worst = fc.reduce((a, b) => (b.mid > a.mid ? b : a));
+    const weekdays = fc.filter(d => !isWeekend(d.date));
+    const best = weekdays.reduce((a, b) => (b.mid < a.mid ? b : a));
+    const worst = weekdays.reduce((a, b) => (b.mid > a.mid ? b : a));
     const save = (worst.mid - best.mid) / 100 * tank;
     const vsToday = (today - best.mid) / 100 * tank;
     const rec = document.getElementById('rec');
@@ -67,30 +75,40 @@ function renderSavings() {
     return { best, worst };
 }
 
+function renderDays() {
+    const { best, worst } = renderSavings();
+    const grid = document.getElementById('days-grid');
+    grid.innerHTML = '';
+    for (const d of fc) {
+        const vs = d.mid - today;
+        const cls = vs > 0.5 ? 'up' : vs < -0.5 ? 'down' : 'flat';
+        const weekend = isWeekend(d.date);
+        const isBest = d.date === best.date && worst.mid - best.mid >= 1;
+        const isWorst = d.date === worst.date && worst.mid - best.mid >= 1;
+        const card = document.createElement('div');
+        card.className = `day-card${isBest ? ' best' : isWorst ? ' worst' : ''}${weekend ? ' no-data' : ''}`;
+        card.title = weekend ? tr('No weekend data: repeats Friday', 'Pas de données la fin de semaine : reprend le vendredi') : '';
+        card.innerHTML = `
+            ${isBest ? `<div class="day-badge best">${tr('✓ Best', '✓ Mieux')}</div>` : ''}
+            ${isWorst ? `<div class="day-badge worst">${tr('Priciest', 'Plus cher')}</div>` : ''}
+            <div class="day-name">${weekdayName(d.date)}</div>
+            <div class="day-date">${fmt.date(d.date)}</div>
+            <div class="day-price">${d.mid.toFixed(1)}¢</div>
+            <div class="day-range">${d.low.toFixed(1)} – ${d.high.toFixed(1)}</div>
+            <span class="day-vs ${cls}">${weekend ? tr('weekend', 'fin de sem.') : cls === 'flat' ? tr('≈ today', "≈ auj.") : fmt.signed(vs) + '¢'}</span>`;
+        grid.appendChild(card);
+    }
+}
+
 (async () => {
     try {
         const { city } = await loadPage();
-        fc = city.forecast.slice(0, 7);
-        today = city.today_price;
-        const { best, worst } = renderSavings();
-        const grid = document.getElementById('days-grid');
-        for (const d of fc) {
-            const vs = d.mid - today;
-            const cls = vs > 0.5 ? 'up' : vs < -0.5 ? 'down' : 'flat';
-            const isBest = d.date === best.date && worst.mid - best.mid >= 1;
-            const isWorst = d.date === worst.date && worst.mid - best.mid >= 1;
-            const card = document.createElement('div');
-            card.className = `day-card${isBest ? ' best' : isWorst ? ' worst' : ''}`;
-            card.innerHTML = `
-                ${isBest ? `<div class="day-badge best">${tr('✓ Best', '✓ Mieux')}</div>` : ''}
-                ${isWorst ? `<div class="day-badge worst">${tr('Priciest', 'Plus cher')}</div>` : ''}
-                <div class="day-name">${weekdayName(d.date)}</div>
-                <div class="day-date">${fmt.date(d.date)}</div>
-                <div class="day-price">${d.mid.toFixed(1)}¢</div>
-                <div class="day-range">${d.low.toFixed(1)} – ${d.high.toFixed(1)}</div>
-                <span class="day-vs ${cls}">${cls === 'flat' ? tr('≈ today', "≈ auj.") : fmt.signed(vs) + '¢'}</span>`;
-            grid.appendChild(card);
-        }
+        productToggle(document.getElementById('product-toggle'), city, product => {
+            const p = productForecast(city, product);
+            fc = p.forecast.slice(0, 7);
+            today = p.today;
+            renderDays();
+        });
         document.getElementById('tank-input').addEventListener('input', renderSavings);
     } catch (e) {
         showError(document.getElementById('rec'), e);

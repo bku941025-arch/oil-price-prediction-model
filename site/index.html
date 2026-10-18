@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-en="Forecast — GasPrix MTL" data-fr="Prévision — GasPrix MTL">Forecast — GasPrix MTL</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
@@ -35,8 +39,8 @@
             <span class="status-value" id="data-date">—</span>
         </div>
         <div class="status-item">
-            <span class="status-label" data-en="Updated" data-fr="Mis à jour"></span>
-            <span class="status-value" id="updated">—</span>
+            <span class="status-label" data-en="Chance higher in a week" data-fr="Probabilité de hausse dans 7 jours"></span>
+            <span class="status-value" id="prob7">—</span>
         </div>
         <div class="status-item">
             <span class="status-label" data-en="7-day error, past year" data-fr="Erreur à 7 jours, an passé"></span>
@@ -45,11 +49,42 @@
     </div>
 
     <div class="card">
-        <div class="card-header">
-            <h2 class="card-title" data-en="4-Week Price Forecast" data-fr="Prévision sur 4 semaines"></h2>
-            <p class="card-subtitle" data-en="The shaded band is where the price landed 80% of the time in out-of-sample testing. It widens with the horizon and with recent volatility." data-fr="La bande ombrée correspond à l'endroit où le prix s'est retrouvé 80 % du temps lors des tests hors échantillon. Elle s'élargit avec l'horizon et la volatilité récente."></p>
+        <div class="card-header card-header-row">
+            <div>
+                <h2 class="card-title" data-en="4-Week Price Forecast" data-fr="Prévision sur 4 semaines"></h2>
+                <p class="card-subtitle" id="chart-sub"></p>
+            </div>
+            <div class="seg" id="product-toggle"></div>
         </div>
         <div class="chart-container"><canvas id="forecastChart"></canvas></div>
+        <p class="prob" id="prob-line"></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header card-header-row">
+            <div>
+                <h2 class="card-title" data-en="Why is the forecast moving?" data-fr="Pourquoi la prévision bouge-t-elle?"></h2>
+                <p class="card-subtitle" data-en="How much each factor adds to or subtracts from the forecast, in ¢/L." data-fr="Ce que chaque facteur ajoute ou retranche à la prévision, en ¢/L."></p>
+            </div>
+            <div class="seg" id="explain-toggle"></div>
+        </div>
+        <div class="drivers" id="drivers"></div>
+        <p class="prob" id="margin-note"></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="What if oil prices jumped today?" data-fr="Et si le pétrole bondissait aujourd'hui?"></h2>
+            <p class="card-subtitle" data-en="Drag to shock wholesale gasoline and crude, and see how the forecast responds." data-fr="Faites glisser pour simuler un choc sur l'essence en gros et le brut, et voyez la réaction de la prévision."></p>
+        </div>
+        <div class="slider-row">
+            <span>−20%</span>
+            <input type="range" id="shock" min="-20" max="20" step="10" value="0" aria-label="Wholesale price shock">
+            <span>+20%</span>
+            <span class="slider-value" id="shock-value">0%</span>
+        </div>
+        <div class="chart-container chart-small"><canvas id="scenarioChart"></canvas></div>
+        <p class="prob" id="scenario-line"></p>
     </div>
 
     <div class="card">
@@ -68,71 +103,148 @@
 </main>
 
 <script>
+const DRIVER_LABELS = {
+    wholesale: ['Wholesale gasoline moves', 'Variation de l\'essence en gros'],
+    margin:    ['Station margin vs normal', 'Marge des stations vs normale'],
+    crude_fx:  ['Crude oil & dollar', 'Pétrole brut et dollar'],
+    momentum:  ['Recent price trend', 'Tendance récente des prix'],
+    calendar:  ['Day of week & holidays', 'Jour de semaine et congés'],
+    local:     ['Local market patterns', 'Particularités du marché local'],
+    baseline:  ['Typical drift', 'Dérive habituelle'],
+    taxes:     ['Scheduled tax changes', 'Changements de taxes prévus'],
+};
+
 (async () => {
+    let index, city;
     try {
-        const { index, city } = await loadPage();
-        document.getElementById('title').textContent = tr(`${city.name} Gas Price Forecast`, `Prévision du prix de l'essence — ${city.name}`);
-        document.getElementById('today-price').textContent = fmt.cents(city.today_price);
-        document.getElementById('data-date').textContent = fmt.date(city.data_end, { month: 'long', day: 'numeric', year: 'numeric' });
-        document.getElementById('updated').textContent = city.generated_at;
-        const m7 = city.holdout.mae[7], p7 = city.holdout.persistence_mae[7];
-        document.getElementById('mae7').textContent = `±${m7.toFixed(1)} ¢/L`;
-        document.getElementById('mae7').title = tr(`Naive "no change" guess: ±${p7.toFixed(1)} ¢/L`, `Estimation naïve « aucun changement » : ±${p7.toFixed(1)} ¢/L`);
-
-        // Signal banner
-        const s = city.signal;
-        const sig = {
-            fill_now: ['⬆️', tr('Prices expected to rise — fill up soon', 'Hausse prévue — faites le plein bientôt')],
-            wait:     ['⬇️', tr('Prices expected to drop — consider waiting', 'Baisse prévue — attendez si possible')],
-            steady:   ['➡️', tr('Prices expected to hold steady', 'Prix stables prévus')],
-        }[s.kind];
-        const box = document.getElementById('signal');
-        box.classList.add(s.kind);
-        document.getElementById('signal-icon').textContent = sig[0];
-        document.getElementById('signal-title').textContent = sig[1];
-        document.getElementById('signal-text').textContent = tr(
-            `Average forecast over the next 3 days: ${fmt.signed(s.change_3d)} ¢/L vs the latest price.`,
-            `Prévision moyenne sur les 3 prochains jours : ${fmt.signed(s.change_3d)} ¢/L par rapport au dernier prix.`);
-        box.hidden = false;
-
-        // Chart: last 60 days of history, then the forecast band
-        const hist = city.historical.slice(-60);
-        const labels = [...hist.map(h => h.date), ...city.forecast.map(f => f.date)];
-        const pad = n => Array(n).fill(null);
-        const nH = hist.length, nF = city.forecast.length;
-        // Start the forecast line at the last actual price so the two lines connect
-        const join = v => [...pad(nH - 1), hist[nH - 1].price, ...v];
-        bandChart(document.getElementById('forecastChart'), labels, [
-            { label: tr('Actual price', 'Prix réel'), data: [...hist.map(h => h.price), ...pad(nF)], color: '#2c5f8a' },
-            { label: tr('Forecast', 'Prévision'), data: join(city.forecast.map(f => f.mid)), color: '#e07b39', dash: [6, 3],
-              band: [join(city.forecast.map(f => f.low)), join(city.forecast.map(f => f.high))], bandColor: 'rgba(224,123,57,0.14)' },
-        ]);
-
-        // Weekly cards
-        const grid = document.getElementById('weekly-grid');
-        grid.innerHTML = '';
-        for (const w of city.weekly) {
-            const card = document.createElement('div');
-            card.className = 'week-card';
-            card.innerHTML = `
-                <div class="week-label">${tr('Week', 'Semaine')} ${w.week}</div>
-                <div class="week-dates">${fmt.date(w.date_from)} → ${fmt.date(w.date_to)}</div>
-                <div class="week-mid">${w.mid.toFixed(1)} ¢/L</div>
-                <div class="week-range">${w.low.toFixed(1)} – ${w.high.toFixed(1)} ¢/L</div>
-                <div class="week-range-label">${tr('80% range', 'Fourchette 80 %')}</div>`;
-            grid.appendChild(card);
-        }
-
-        // Alerts (shown only when the pipeline has an ntfy topic configured)
-        if (index.alerts) {
-            const topic = `${index.alerts.topic_prefix}-${CITY}`;
-            document.getElementById('alerts-text').innerHTML = tr(
-                `Install the free <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> app and subscribe to <code>${topic}</code> on <code>${index.alerts.server}</code>. You'll get a notification when ${city.name} prices are expected to move more than ${index.alerts.threshold} ¢/L within 3 days.`,
-                `Installez l'application gratuite <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> et abonnez-vous à <code>${topic}</code> sur <code>${index.alerts.server}</code>. Vous serez averti lorsque les prix à ${city.name} devraient varier de plus de ${index.alerts.threshold} ¢/L en 3 jours.`);
-            document.getElementById('alerts-card').hidden = false;
-        }
+        ({ index, city } = await loadPage());
     } catch (e) {
-        showError(document.getElementById('weekly-grid'), e);
+        return showError(document.getElementById('weekly-grid'), e);
+    }
+    document.getElementById('title').textContent = tr(`${city.name} Gas Price Forecast`, `Prévision du prix de l'essence — ${city.name}`);
+    document.getElementById('data-date').textContent = fmt.date(city.data_end, { month: 'long', day: 'numeric', year: 'numeric' });
+    if (city.holdout) {
+        const m7 = city.holdout.mae[7], p7 = city.holdout.persistence_mae[7];
+        const el = document.getElementById('mae7');
+        el.textContent = `±${m7.toFixed(1)} ¢/L`;
+        el.title = tr(`Naive "no change" guess: ±${p7.toFixed(1)} ¢/L`, `Estimation naïve « aucun changement » : ±${p7.toFixed(1)} ¢/L`);
+    }
+    document.getElementById('prob7').textContent = fmt.pct(city.forecast[6].prob_up);
+
+    // Signal banner
+    const s = city.signal;
+    const sig = {
+        fill_now: ['⬆️', tr('Prices expected to rise — fill up soon', 'Hausse prévue — faites le plein bientôt')],
+        wait:     ['⬇️', tr('Prices expected to drop — consider waiting', 'Baisse prévue — attendez si possible')],
+        steady:   ['➡️', tr('Prices expected to hold steady', 'Prix stables prévus')],
+    }[s.kind];
+    const box = document.getElementById('signal');
+    box.classList.add(s.kind);
+    document.getElementById('signal-icon').textContent = sig[0];
+    document.getElementById('signal-title').textContent = sig[1];
+    document.getElementById('signal-text').textContent = tr(
+        `Average forecast over the next 3 days: ${fmt.signed(s.change_3d)} ¢/L vs the latest price.`,
+        `Prévision moyenne sur les 3 prochains jours : ${fmt.signed(s.change_3d)} ¢/L par rapport au dernier prix.`);
+    box.hidden = false;
+
+    // Forecast chart, per product
+    const hist = city.historical.slice(-60);
+    const labels = [...hist.map(h => h.date), ...city.forecast.map(f => f.date)];
+    const pad = n => Array(n).fill(null);
+    let chart = null;
+    productToggle(document.getElementById('product-toggle'), city, product => {
+        const { today, forecast } = productForecast(city, product);
+        const offset = today - city.today_price;           // derived products follow regular's history shape
+        const nH = hist.length;
+        const histVals = hist.map(h => product === 'regular' ? h.price : null);
+        if (product !== 'regular') histVals[nH - 1] = today;
+        const join = v => [...pad(nH - 1), today, ...v];
+        if (chart) chart.destroy();
+        chart = bandChart(document.getElementById('forecastChart'), labels, [
+            { label: tr('Actual price', 'Prix réel'), data: [...histVals, ...pad(forecast.length)], color: '#2c5f8a' },
+            { label: tr('Forecast', 'Prévision'), data: join(forecast.map(f => f.mid)), color: '#e07b39', dash: [6, 3],
+              band: [join(forecast.map(f => f.low)), join(forecast.map(f => f.high))], bandColor: 'rgba(224,123,57,0.14)' },
+        ]);
+        document.getElementById('today-price').textContent = fmt.cents(today);
+        document.getElementById('chart-sub').textContent = product === 'regular'
+            ? tr('The shaded band is where the price landed 80% of the time in out-of-sample testing.', 'La bande ombrée correspond à l\'endroit où le prix s\'est retrouvé 80 % du temps lors des tests hors échantillon.')
+            : tr(`${PRODUCT_NAMES[product][0]} follows regular gasoline's expected move from today's ${fmt.signed(offset)} ¢/L gap.`,
+                 `Le ${PRODUCT_NAMES[product][1].toLowerCase()} suit la variation prévue de l'ordinaire à partir de l'écart actuel de ${fmt.signed(offset)} ¢/L.`);
+    });
+    const f7 = city.forecast[6], f28 = city.forecast[27];
+    document.getElementById('prob-line').textContent = tr(
+        `${fmt.pct(f7.prob_up)} chance the price is higher on ${fmt.date(f7.date, { weekday: 'long', month: 'short', day: 'numeric' })} than today, and ${fmt.pct(f28.prob_up)} by ${fmt.date(f28.date)}.`,
+        `${fmt.pct(f7.prob_up)} de probabilité que le prix soit plus élevé le ${fmt.date(f7.date, { weekday: 'long', month: 'short', day: 'numeric' })} qu'aujourd'hui, et ${fmt.pct(f28.prob_up)} d'ici le ${fmt.date(f28.date)}.`);
+
+    // Explainer
+    const drivers = document.getElementById('drivers');
+    const hs = Object.keys(city.explain);
+    const exToggle = document.getElementById('explain-toggle');
+    exToggle.innerHTML = hs.map(h => `<button type="button" data-h="${h}">${tr(`${h} days`, `${h} jours`)}</button>`).join('');
+    function renderDrivers(h) {
+        exToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.h === h));
+        const parts = Object.entries(city.explain[h]).filter(([, v]) => Math.abs(v) >= 0.05).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+        const total = Object.values(city.explain[h]).reduce((a, b) => a + b, 0);
+        const max = Math.max(1, ...parts.map(([, v]) => Math.abs(v)));
+        drivers.innerHTML = parts.map(([k, v]) => `
+            <div class="driver">
+                <span class="driver-label">${DRIVER_LABELS[k][LANG === 'fr' ? 1 : 0]}</span>
+                <span class="driver-track"><span class="driver-bar ${v > 0 ? 'up' : 'down'}" style="width:${Math.abs(v) / max * 50}%"></span></span>
+                <span class="driver-value">${fmt.signed(v)}</span>
+            </div>`).join('') + `
+            <div class="driver driver-total"><span>${tr('Forecast change', 'Variation prévue')}</span><span></span><span class="driver-value">${fmt.signed(total)}</span></div>`;
+        if (!parts.length) drivers.innerHTML = `<p class="muted">${tr('No factor moves this forecast by more than 0.05 ¢/L.', 'Aucun facteur ne déplace cette prévision de plus de 0,05 ¢/L.')}</p>`;
+    }
+    exToggle.addEventListener('click', e => { const b = e.target.closest('button'); if (b) renderDrivers(b.dataset.h); });
+    renderDrivers(hs.includes('14') ? '14' : hs[0]);
+    const g = city.margin_gauge;
+    document.getElementById('margin-note').innerHTML = tr(
+        `Stations currently charge ${g.margin.toFixed(1)} ¢/L over wholesale vs a usual ${g.normal.toFixed(1)} ¢/L (higher than ${Math.round(g.percentile * 100)}% of the past year). <a href="${link('breakdown.html')}">See what's in the price →</a>`,
+        `Les stations prennent actuellement ${g.margin.toFixed(1)} ¢/L au-dessus du prix de gros, contre ${g.normal.toFixed(1)} ¢/L habituellement (plus que ${Math.round(g.percentile * 100)} % de l'année passée). <a href="${link('breakdown.html')}">Voir les composantes du prix →</a>`);
+
+    // Scenarios
+    const scenLabels = city.forecast.map(f => f.date);
+    const scenChart = bandChart(document.getElementById('scenarioChart'), scenLabels, [
+        { label: tr('Current forecast', 'Prévision actuelle'), data: city.forecast.map(f => f.mid), color: '#e07b39', dash: [6, 3] },
+        { label: tr('With shock', 'Avec le choc'), data: city.forecast.map(f => f.mid), color: '#2c5f8a' },
+    ]);
+    const shock = document.getElementById('shock');
+    function renderShock() {
+        const v = +shock.value;
+        const key = v === 0 ? null : `${v > 0 ? '+' : '-'}${Math.abs(v)}%`;
+        const series = key ? city.scenarios[key] : city.forecast.map(f => f.mid);
+        scenChart.data.datasets[1].data = series;
+        scenChart.update();
+        document.getElementById('shock-value').textContent = `${v > 0 ? '+' : ''}${v}%`;
+        const d7 = series[6] - city.forecast[6].mid, d28 = series[27] - city.forecast[27].mid;
+        document.getElementById('scenario-line').textContent = v === 0 ? '' : tr(
+            `A ${v > 0 ? '+' : ''}${v}% jump would move the forecast ${fmt.signed(d7)} ¢/L in a week and ${fmt.signed(d28)} ¢/L in 4 weeks.`,
+            `Un choc de ${v > 0 ? '+' : ''}${v} % déplacerait la prévision de ${fmt.signed(d7)} ¢/L en une semaine et de ${fmt.signed(d28)} ¢/L en 4 semaines.`);
+    }
+    shock.addEventListener('input', renderShock);
+
+    // Weekly cards
+    const grid = document.getElementById('weekly-grid');
+    grid.innerHTML = '';
+    for (const w of city.weekly) {
+        const card = document.createElement('div');
+        card.className = 'week-card';
+        card.innerHTML = `
+            <div class="week-label">${tr('Week', 'Semaine')} ${w.week}</div>
+            <div class="week-dates">${fmt.date(w.date_from)} → ${fmt.date(w.date_to)}</div>
+            <div class="week-mid">${w.mid.toFixed(1)} ¢/L</div>
+            <div class="week-range">${w.low.toFixed(1)} – ${w.high.toFixed(1)} ¢/L</div>
+            <div class="week-range-label">${tr('80% range', 'Fourchette 80 %')}</div>`;
+        grid.appendChild(card);
+    }
+
+    // Alerts (shown only when the pipeline has an ntfy topic configured)
+    if (index.alerts) {
+        const topic = esc(`${index.alerts.topic_prefix}-${CITY}`), server = esc(index.alerts.server);
+        document.getElementById('alerts-text').innerHTML = tr(
+            `Install the free <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> app and subscribe to <code>${topic}</code> on <code>${server}</code>. You'll get a notification when ${esc(city.name)} prices are expected to move more than ${index.alerts.threshold} ¢/L within 3 days. Prefer a feed reader? Use the <a href="feeds/${CITY}.xml">RSS feed</a>.`,
+            `Installez l'application gratuite <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> et abonnez-vous à <code>${topic}</code> sur <code>${server}</code>. Vous serez averti lorsque les prix à ${esc(city.name)} devraient varier de plus de ${index.alerts.threshold} ¢/L en 3 jours. Vous préférez un lecteur de flux? Utilisez le <a href="feeds/${CITY}.xml">flux RSS</a>.`);
+        document.getElementById('alerts-card').hidden = false;
     }
 })();
 </script>

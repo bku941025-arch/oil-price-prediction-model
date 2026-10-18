@@ -1,0 +1,16 @@
+{
+  "name": "GasPrix — Gas Price Forecasts",
+  "short_name": "GasPrix",
+  "description": "28-day gas price forecasts for 77 Canadian cities, with a best-day-to-fill-up pick.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#2c5f8a",
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

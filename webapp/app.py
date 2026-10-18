@@ -28,6 +28,10 @@ LEGACY_PAGES = {'/budget': 'budget.html', '/fillup': 'fillup.html'}
 def cache_headers(resp):
     # Revalidate every file (cheap with ETags) so pages, scripts and daily data never mismatch
     resp.headers['Cache-Control'] = 'no-cache'
+    if request.path.startswith(('/data/', '/feeds/', '/api/')):
+        resp.headers['Access-Control-Allow-Origin'] = '*'   # public JSON API
+    if request.path.endswith('.webmanifest'):
+        resp.headers['Content-Type'] = 'application/manifest+json'
     return resp
 
 
