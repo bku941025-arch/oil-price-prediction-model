@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="What's in the Price — GasPrix MTL" data-fr="Composantes du prix — GasPrix MTL">What's in the Price — GasPrix MTL</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" id="title"></h1>
+        <p class="page-subtitle" data-en="Where each cent at the pump goes: crude oil, refining, the station's margin, and taxes." data-fr="Où va chaque cent à la pompe : pétrole brut, raffinage, marge de la station et taxes."></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="Are stations charging more than usual?" data-fr="Les stations demandent-elles plus que d'habitude?"></h2>
+            <p class="card-subtitle" id="gauge-sub"></p>
+        </div>
+        <div class="gauge" id="gauge"><div class="gauge-band" id="gauge-band"></div><div class="gauge-mark" id="gauge-mark"></div></div>
+        <div class="gauge-scale"><span id="g-min"></span><span data-en="Margin over wholesale (¢/L)" data-fr="Marge sur le prix de gros (¢/L)"></span><span id="g-max"></span></div>
+        <div class="recommendation" id="gauge-text" style="margin-top:1rem"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="Today's price, piece by piece" data-fr="Le prix d'aujourd'hui, morceau par morceau"></h2>
+        </div>
+        <div class="table-wrapper"><table class="compact-table" id="today-table"></table></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="Two years of price components" data-fr="Deux ans de composantes du prix"></h2>
+            <p class="card-subtitle" data-en="Weekly. Drops in the tax layers show the 2025 carbon charge removal (outside Québec) and the 2026 federal excise suspension." data-fr="Hebdomadaire. Les baisses des couches de taxes montrent l'abolition de la redevance carbone en 2025 (hors Québec) et la suspension de la taxe d'accise fédérale en 2026."></p>
+        </div>
+        <div class="chart-container" style="height:380px"><canvas id="stack"></canvas></div>
+    </div>
+
+    <div class="disclaimer">
+        <p data-en="Approximate. Crude and refining use US benchmark prices (WTI and New York Harbor gasoline) converted to Canadian cents per litre; Canadian rack prices differ by region, so the 'station & distribution' slice also absorbs transport and regional refining costs. Fuel taxes use provincial general rates; some areas (e.g. parts of Québec near borders or in remote regions) pay less."
+           data-fr="Approximatif. Le brut et le raffinage utilisent les prix de référence américains (WTI et essence de New York) convertis en cents canadiens par litre; les prix à la rampe canadiens varient selon la région, de sorte que la part « station et distribution » inclut aussi le transport et les écarts de raffinage régionaux. Les taxes sur les carburants utilisent les taux provinciaux généraux; certaines zones (p. ex. régions frontalières ou éloignées du Québec) paient moins."></p>
+    </div>
+</main>
+
+<script>
+const PARTS = [
+    ['crude',     '#5b6b7f', 'Crude oil', 'Pétrole brut'],
+    ['refining',  '#8aa1b8', 'Refining', 'Raffinage'],
+    ['retail',    '#e0a040', 'Station & distribution', 'Station et distribution'],
+    ['fuel_tax',  '#2c5f8a', 'Fuel taxes (federal + provincial)', 'Taxes sur les carburants (fédérale + provinciale)'],
+    ['carbon',    '#3aaa6e', 'Carbon charge', 'Redevance carbone'],
+    ['sales_tax', '#b36b9e', 'Sales tax (GST/HST/QST)', 'Taxe de vente (TPS/TVH/TVQ)'],
+];
+
+(async () => {
+    let city, hist;
+    try {
+        ({ city } = await loadPage());
+        hist = await getJSON(`data/history/${CITY}.json`);
+    } catch (e) {
+        return showError(document.querySelector('.card'), e);
+    }
+    document.getElementById('title').textContent = tr(`What's in the Price — ${city.name}`, `Composantes du prix — ${city.name}`);
+
+    // Gauge
+    const g = city.margin_gauge;
+    const lo = Math.min(g.low, g.margin) - 5, hi = Math.max(g.high, g.margin) + 5;
+    const pos = v => ((v - lo) / (hi - lo) * 100) + '%';
+    const band = document.getElementById('gauge-band');
+    band.style.left = pos(g.low);
+    band.style.width = `calc(${pos(g.high)} - ${pos(g.low)})`;
+    const mark = document.getElementById('gauge-mark');
+    mark.style.left = pos(g.margin);
+    mark.dataset.label = `${tr('Today', "Auj.")} ${g.margin.toFixed(1)}`;
+    document.getElementById('g-min').textContent = lo.toFixed(0);
+    document.getElementById('g-max').textContent = hi.toFixed(0);
+    document.getElementById('gauge-sub').textContent = tr(
+        `Pump price before tax, minus wholesale gasoline. Shaded: the middle 80% of the past year (${g.low.toFixed(1)}–${g.high.toFixed(1)} ¢/L).`,
+        `Prix à la pompe avant taxes, moins le prix de gros. Zone ombrée : les 80 % centraux de l'année passée (${g.low.toFixed(1)}–${g.high.toFixed(1)} ¢/L).`);
+    const p = g.percentile;
+    document.getElementById('gauge-text').textContent = p >= 0.8
+        ? tr(`Margins are high: higher than ${Math.round(p * 100)}% of the past year. Historically, high margins tend to come down, which pulls the forecast lower.`,
+             `Les marges sont élevées : plus que ${Math.round(p * 100)} % de l'année passée. Historiquement, des marges élevées ont tendance à redescendre, ce qui tire la prévision vers le bas.`)
+        : p <= 0.2
+        ? tr(`Margins are thin: lower than ${Math.round((1 - p) * 100)}% of the past year. Stations tend to rebuild margins, which pushes prices up.`,
+             `Les marges sont minces : plus basses que ${Math.round((1 - p) * 100)} % de l'année passée. Les stations ont tendance à les rétablir, ce qui pousse les prix à la hausse.`)
+        : tr('Margins are in their normal range.', 'Les marges sont dans leur plage normale.');
+
+    // Today's breakdown
+    const b = hist.breakdown;
+    const last = b[b.length - 1];
+    document.getElementById('today-table').innerHTML = `
+        <thead><tr><th>${tr('Component', 'Composante')}</th><th class="num">¢/L</th><th class="num">${tr('Share', 'Part')}</th></tr></thead>
+        <tbody>${PARTS.map(([k, c, en, fr]) => `<tr><td><span class="legend-swatch" style="background:${c}"></span>${tr(en, fr)}</td>
+            <td class="num">${last[k].toFixed(1)}</td><td class="num">${Math.round(last[k] / last.price * 100)}%</td></tr>`).join('')}
+            <tr><td><strong>${tr('Pump price', 'Prix à la pompe')} (${fmt.date(last.date)})</strong></td><td class="num"><strong>${last.price.toFixed(1)}</strong></td><td></td></tr>
+        </tbody>`;
+
+    // Stacked chart
+    new Chart(document.getElementById('stack').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: b.map(r => r.date),
+            datasets: PARTS.map(([k, c, en, fr], i) => ({
+                label: tr(en, fr), data: b.map(r => r[k]), backgroundColor: c + 'cc', borderColor: c,
+                borderWidth: 1, pointRadius: 0, fill: i === 0 ? 'origin' : '-1', tension: 0.2,
+            })),
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { font: { ...CHART_FONT, size: 12 }, boxWidth: 12 } },
+                tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)} ¢/L`,
+                                        footer: items => `${tr('Total', 'Total')}: ${b[items[0].dataIndex].price.toFixed(1)} ¢/L` } },
+            },
+            scales: {
+                x: { ticks: { maxTicksLimit: 8, font: CHART_FONT, callback(v) { return fmt.date(this.getLabelForValue(v), { month: 'short', year: '2-digit' }); } }, grid: GRID },
+                y: { stacked: true, ticks: { callback: v => v + '¢', font: CHART_FONT }, grid: GRID },
+            },
+        },
+    });
+})();
+</script>
+</body>
+</html>

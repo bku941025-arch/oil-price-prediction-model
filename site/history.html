@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="Price History — GasPrix MTL" data-fr="Historique des prix — GasPrix MTL">Price History — GasPrix MTL</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" id="title"></h1>
+        <p class="page-subtitle" data-en="Ten years of daily retail prices, with the events that moved them." data-fr="Dix ans de prix de détail quotidiens, avec les événements qui les ont fait bouger."></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header card-header-row">
+            <div class="seg" id="range">
+                <button type="button" data-y="1" data-en="1 year" data-fr="1 an"></button>
+                <button type="button" data-y="3" data-en="3 years" data-fr="3 ans"></button>
+                <button type="button" data-y="0" class="active" data-en="All" data-fr="Tout"></button>
+            </div>
+            <label class="checkbox-row"><span data-en="Compare with" data-fr="Comparer avec"></span>
+                <select id="compare" class="city-select" style="margin:0"><option value="">—</option></select></label>
+        </div>
+        <div class="chart-container" style="height:380px"><canvas id="historyChart"></canvas></div>
+        <div class="table-wrapper" style="margin-top:1rem"><table class="compact-table" id="events"></table></div>
+    </div>
+
+    <div class="card card-narrow">
+        <div class="card-header">
+            <h2 class="card-title" data-en="Is there a cheapest day of the week?" data-fr="Y a-t-il un jour moins cher dans la semaine?"></h2>
+            <p class="card-subtitle" data-en="Average gap between each weekday's price and that week's average, last 2 years. Bars show ±2 standard errors." data-fr="Écart moyen entre le prix de chaque jour et la moyenne de sa semaine, 2 dernières années. Les barres montrent ±2 erreurs-types."></p>
+        </div>
+        <div class="chart-container chart-small" style="margin-top:0"><canvas id="weekdayChart"></canvas></div>
+        <div class="recommendation" id="weekday-text" style="margin-top:1rem"></div>
+    </div>
+</main>
+
+<script>
+const EVENTS = [
+    ['2019-04-01', 'Federal carbon charge begins (ON, SK, MB)', 'Début de la redevance carbone fédérale (ON, SK, MB)'],
+    ['2020-03-11', 'COVID-19 declared a pandemic; demand collapses', 'COVID-19 déclarée pandémie; la demande s\'effondre'],
+    ['2022-02-24', 'Russia invades Ukraine; oil spikes', 'La Russie envahit l\'Ukraine; le pétrole flambe'],
+    ['2022-07-01', 'Ontario cuts its gas tax by 5.7¢/L', 'L\'Ontario réduit sa taxe sur l\'essence de 5,7 ¢/L'],
+    ['2025-04-01', 'Federal and BC carbon charges removed', 'Abolition des redevances carbone fédérale et britanno-colombienne'],
+    ['2026-04-20', 'Federal excise tax (10¢/L) suspended', 'Suspension de la taxe d\'accise fédérale (10 ¢/L)'],
+];
+
+function series(h) {
+    const start = new Date(h.start + 'T00:00:00Z');
+    return h.prices.map((p, i) => {
+        const d = new Date(start); d.setUTCDate(d.getUTCDate() + i);
+        return [d.toISOString().slice(0, 10), p];
+    });
+}
+
+const eventLines = {
+    id: 'eventLines',
+    afterDatasetsDraw(chart) {
+        const { ctx, chartArea, scales: { x } } = chart;
+        const labels = chart.data.labels;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.setLineDash([3, 3]);
+        ctx.fillStyle = '#666';
+        ctx.font = '600 10px DM Sans';
+        EVENTS.forEach((e, n) => {
+            const i = labels.indexOf(e[0]);
+            if (i < 0) return;
+            const px = x.getPixelForValue(i);
+            ctx.beginPath(); ctx.moveTo(px, chartArea.top); ctx.lineTo(px, chartArea.bottom); ctx.stroke();
+            ctx.fillText(String(n + 1), px + 3, chartArea.top + 10);
+        });
+        ctx.restore();
+    },
+};
+
+(async () => {
+    let index, hist;
+    try {
+        ({ index } = await loadPage({ cityData: false }));
+        hist = await getJSON(`data/history/${CITY}.json`);
+    } catch (e) {
+        return showError(document.querySelector('.card'), e);
+    }
+    const name = index.cities.find(c => c.slug === CITY).name;
+    document.getElementById('title').textContent = tr(`Price History — ${name}`, `Historique des prix — ${name}`);
+    const compareSel = document.getElementById('compare');
+    cityOptions(compareSel, index, '');
+    compareSel.querySelector(`option[value="${CITY}"]`)?.remove();
+
+    const main = series(hist);
+    let other = null, years = 0, chart = null;
+    function draw() {
+        const cutoff = years ? new Date(Date.now() - years * 365 * 864e5).toISOString().slice(0, 10) : '';
+        const rows = main.filter(r => r[0] >= cutoff);
+        const labels = rows.map(r => r[0]);
+        const sets = [{ label: name, data: rows.map(r => r[1]), color: '#2c5f8a', width: 1.5, spanGaps: true }];
+        if (other) {
+            const m = Object.fromEntries(series(other.hist));
+            sets.push({ label: other.name, data: labels.map(d => m[d] ?? null), color: '#e07b39', width: 1.5, spanGaps: true });
+        }
+        if (chart) chart.destroy();
+        Chart.register(eventLines);
+        chart = bandChart(document.getElementById('historyChart'), labels, sets, { animation: false, dateFmt: { month: 'short', year: 'numeric' } });
+    }
+    document.getElementById('range').addEventListener('click', e => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        years = +b.dataset.y;
+        document.querySelectorAll('#range button').forEach(x => x.classList.toggle('active', x === b));
+        draw();
+    });
+    compareSel.addEventListener('change', async () => {
+        const slug = compareSel.value;
+        other = slug ? { name: index.cities.find(c => c.slug === slug).name, hist: await getJSON(`data/history/${slug}.json`) } : null;
+        draw();
+    });
+    draw();
+
+    const byDate = Object.fromEntries(main);
+    document.getElementById('events').innerHTML = `<thead><tr><th>#</th><th>${tr('Date', 'Date')}</th><th>${tr('Event', 'Événement')}</th><th class="num">${tr('Price', 'Prix')}</th></tr></thead><tbody>` +
+        EVENTS.map((e, n) => `<tr><td>${n + 1}</td><td>${fmt.date(e[0], { year: 'numeric', month: 'short', day: 'numeric' })}</td><td>${tr(e[1], e[2])}</td><td class="num">${byDate[e[0]] != null ? byDate[e[0]].toFixed(1) : '—'}</td></tr>`).join('') + '</tbody>';
+
+    // Weekday effect
+    const wd = hist.weekday;
+    const days = [0, 1, 2, 3, 4];
+    const names = days.map(d => new Date(2024, 0, 1 + d).toLocaleDateString(LANG === 'fr' ? 'fr-CA' : 'en-CA', { weekday: 'long' }));
+    new Chart(document.getElementById('weekdayChart').getContext('2d'), {
+        type: 'bar',
+        data: { labels: names, datasets: [{ data: days.map(d => wd[d].mean), backgroundColor: days.map(d => wd[d].mean < 0 ? '#3aaa6e' : '#e07b39'), borderRadius: 4 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${fmt.signed(c.parsed.y)} ¢/L (±${(2 * wd[days[c.dataIndex]].se).toFixed(2)})` } } },
+            scales: { y: { ticks: { callback: v => v + '¢', font: CHART_FONT }, grid: GRID }, x: { ticks: { font: CHART_FONT }, grid: { display: false } } },
+        },
+    });
+    const best = days.reduce((a, b) => wd[b].mean < wd[a].mean ? b : a);
+    const significant = Math.abs(wd[best].mean) > 2 * wd[best].se && Math.abs(wd[best].mean) >= 0.3;
+    document.getElementById('weekday-text').textContent = significant
+        ? tr(`${names[best]} has been cheapest on average, by ${Math.abs(wd[best].mean).toFixed(1)} ¢/L vs the weekly average.`,
+             `Le ${names[best]} a été le moins cher en moyenne, de ${Math.abs(wd[best].mean).toFixed(1)} ¢/L par rapport à la moyenne de la semaine.`)
+        : tr(`No reliable weekday pattern here: differences are under ${Math.max(...days.map(d => Math.abs(wd[d].mean))).toFixed(1)} ¢/L and within noise. Timing your fill-up by weekday won't save much; use the forecast instead.`,
+             `Aucune tendance fiable selon le jour : les écarts sont inférieurs à ${Math.max(...days.map(d => Math.abs(wd[d].mean))).toFixed(1).replace('.', ',')} ¢/L et dans le bruit. Choisir le jour de la semaine n'économise pas grand-chose; fiez-vous plutôt à la prévision.`);
+})();
+</script>
+</body>
+</html>

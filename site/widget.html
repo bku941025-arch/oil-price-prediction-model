@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GasPrix widget</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --accent: #2c5f8a; --green: #2a8a5a; --orange: #c0602a; --mid: #666; --border: #e8e8e8; }
+        * { box-sizing: border-box; margin: 0; }
+        body { font-family: 'DM Sans', system-ui, sans-serif; background: #fff; color: #222; }
+        .w { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; max-width: 360px; }
+        .top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+        .city { font-weight: 600; font-size: 14px; }
+        .price { font-family: 'DM Serif Display', serif; font-size: 28px; }
+        .sig { font-size: 13px; margin-top: 4px; }
+        .sig.fill_now { color: var(--orange); } .sig.wait { color: var(--green); } .sig.steady { color: var(--mid); }
+        .row { display: flex; justify-content: space-between; font-size: 12px; color: var(--mid); margin-top: 8px; }
+        a { color: var(--accent); text-decoration: none; font-size: 11px; }
+    </style>
+</head>
+<body>
+<div class="w" id="w">…</div>
+<script>
+(async () => {
+    const q = new URLSearchParams(location.search);
+    const lang = q.get('lang') === 'fr' ? 'fr' : 'en';
+    const t = (en, fr) => lang === 'fr' ? fr : en;
+    const slug = (q.get('city') || 'montreal').replace(/[^a-z0-9-]/g, '');
+    const el = document.getElementById('w');
+    try {
+        const c = await (await fetch(`data/${slug}.json`, { cache: 'no-cache' })).json();
+        const f7 = c.forecast[6];
+        const sig = { fill_now: t('▲ Rising — fill up soon', '▲ Hausse — faites le plein'), wait: t('▼ Falling — consider waiting', '▼ Baisse — attendez'), steady: t('▶ Steady', '▶ Stable') }[c.signal.kind];
+        const name = c.name.replace(/[<>&]/g, '');
+        el.innerHTML = `
+            <div class="top"><span class="city">⛽ ${name}</span><span class="price">${c.today_price.toFixed(1)}<small style="font-size:13px"> ¢/L</small></span></div>
+            <div class="sig ${c.signal.kind}">${sig}</div>
+            <div class="row"><span>${t('In 7 days', 'Dans 7 jours')}: ${f7.low.toFixed(0)}–${f7.high.toFixed(0)} ¢</span><span>${t('Chance higher', 'Prob. hausse')}: ${Math.round(f7.prob_up * 100)}%</span></div>
+            <div class="row"><span>${t('Data', 'Données')}: ${c.data_end}</span><a href="index.html?city=${slug}&lang=${lang}" target="_blank" rel="noopener">GasPrix →</a></div>`;
+    } catch (e) {
+        el.textContent = t('Forecast unavailable', 'Prévision indisponible');
+    }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="Worth the Drive? — GasPrix MTL" data-fr="Ça vaut le détour? — GasPrix MTL">Worth the Drive? — GasPrix MTL</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="Is It Worth Driving Elsewhere to Fill Up?" data-fr="Ça vaut le détour pour faire le plein?"></h1>
+        <p class="page-subtitle" data-en="Gatineau to Ottawa, or any two cities: compare the savings with the cost of the extra driving." data-fr="De Gatineau à Ottawa, ou entre deux villes quelconques : comparez l'économie au coût du trajet supplémentaire."></p>
+    </div>
+
+    <div class="card card-narrow">
+        <div class="form-grid">
+            <div>
+                <label class="input-label" for="home" data-en="Your city" data-fr="Votre ville"></label>
+                <select id="home" class="spend-input"></select>
+            </div>
+            <div>
+                <label class="input-label" for="other" data-en="Fill up in" data-fr="Faire le plein à"></label>
+                <select id="other" class="spend-input"></select>
+            </div>
+            <div>
+                <label class="input-label" for="km" data-en="Extra distance (km, one way)" data-fr="Distance supplémentaire (km, aller)"></label>
+                <input type="number" id="km" class="spend-input" value="10" min="0" step="1">
+            </div>
+            <div>
+                <label class="input-label" for="tank" data-en="Litres you'll buy" data-fr="Litres achetés"></label>
+                <input type="number" id="tank" class="spend-input" value="50" min="1" step="5">
+            </div>
+            <div>
+                <label class="input-label" for="eff" data-en="Fuel use (L/100 km)" data-fr="Consommation (L/100 km)"></label>
+                <input type="number" id="eff" class="spend-input" value="8.5" min="1" step="0.1">
+            </div>
+            <div>
+                <label class="input-label" for="time" data-en="Your time ($/hour, optional)" data-fr="Votre temps ($/heure, facultatif)"></label>
+                <input type="number" id="time" class="spend-input" value="0" min="0" step="5">
+            </div>
+        </div>
+        <div class="metric-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+            <div class="metric"><div class="metric-label" data-en="Price difference" data-fr="Écart de prix"></div><div class="metric-value" id="diff">—</div><div class="metric-note" id="diff-note"></div></div>
+            <div class="metric"><div class="metric-label" data-en="Savings on the fill-up" data-fr="Économie sur le plein"></div><div class="metric-value" id="save">—</div></div>
+            <div class="metric"><div class="metric-label" data-en="Cost of the detour" data-fr="Coût du détour"></div><div class="metric-value" id="cost">—</div><div class="metric-note" id="cost-note"></div></div>
+            <div class="metric"><div class="metric-label" data-en="Net" data-fr="Net"></div><div class="metric-value" id="net">—</div></div>
+        </div>
+        <div class="recommendation" id="verdict"></div>
+        <p class="prob" id="breakeven"></p>
+    </div>
+
+    <div class="disclaimer card-narrow">
+        <p data-en="City averages hide station-to-station differences of several cents. Assumes about 60 km/h for the detour when valuing your time. Prices are each city's latest Kalibrate average."
+           data-fr="Les moyennes municipales masquent des écarts de plusieurs cents entre stations. Le temps du détour est estimé à environ 60 km/h. Les prix sont la plus récente moyenne Kalibrate de chaque ville."></p>
+    </div>
+</main>
+
+<script>
+(async () => {
+    let index;
+    try {
+        ({ index } = await loadPage({ cityData: false }));
+    } catch (e) {
+        return showError(document.querySelector('.card'), e);
+    }
+    const bySlug = Object.fromEntries(index.cities.map(c => [c.slug, c]));
+    const params = new URLSearchParams(location.search);
+    const home = params.get('home') || (CITY === 'gatineau' || !bySlug[CITY] ? 'gatineau' : CITY);
+    const other = params.get('other') || (home === 'gatineau' ? 'ottawa' : (home === 'ottawa' ? 'gatineau' : nearest(home)));
+    function nearest(slug) {
+        const a = bySlug[slug];
+        return index.cities.filter(c => c.slug !== slug)
+            .sort((x, y) => Math.hypot(x.lat - a.lat, x.lon - a.lon) - Math.hypot(y.lat - a.lat, y.lon - a.lon))[0].slug;
+    }
+    cityOptions(document.getElementById('home'), index, home);
+    cityOptions(document.getElementById('other'), index, other);
+
+    const num = id => Math.max(parseFloat(document.getElementById(id).value) || 0, 0);
+    function update() {
+        const h = bySlug[document.getElementById('home').value], o = bySlug[document.getElementById('other').value];
+        const diff = h.today_price - o.today_price;                         // ¢/L cheaper elsewhere
+        const litres = num('tank');
+        const roundKm = num('km') * 2;
+        const save = diff * litres / 100;
+        const fuel = roundKm * num('eff') / 100 * (o.today_price / 100);
+        const time = roundKm / 60 * num('time');
+        const net = save - fuel - time;
+        document.getElementById('diff').textContent = `${fmt.signed(-diff)} ¢/L`;
+        document.getElementById('diff-note').textContent = diff > 0 ? tr(`cheaper in ${o.name}`, `moins cher à ${o.name}`) : tr(`pricier in ${o.name}`, `plus cher à ${o.name}`);
+        document.getElementById('save').textContent = fmt.money(save);
+        document.getElementById('cost').textContent = fmt.money(fuel + time);
+        document.getElementById('cost-note').textContent = tr(`${roundKm} km round trip`, `${roundKm} km aller-retour`) + (time > 0 ? tr(` incl. ${fmt.money(time)} of time`, ` dont ${fmt.money(time)} de temps`) : '');
+        const n = document.getElementById('net');
+        n.textContent = fmt.money(net);
+        n.className = 'metric-value ' + (net > 0 ? 'better' : 'worse');
+        document.getElementById('verdict').textContent = net > 0.5
+            ? tr(`✅ Worth it: you'd come out about ${fmt.money(net)} ahead by filling up in ${o.name}.`, `✅ Ça vaut le coup : vous économiseriez environ ${fmt.money(net)} en faisant le plein à ${o.name}.`)
+            : net < -0.5 ? tr(`❌ Not worth it: the detour costs more than you'd save.`, `❌ Pas rentable : le détour coûte plus que l'économie.`)
+            : tr('≈ A wash: savings and detour costs roughly cancel out.', '≈ Kif-kif : l\'économie et le coût du détour s\'annulent à peu près.');
+        const perLitre = (fuel + time) / Math.max(litres, 1) * 100;
+        document.getElementById('breakeven').textContent = diff > 0
+            ? tr(`Break-even: the trip pays off when you buy more than ${Math.ceil((fuel + time) / (diff / 100))} L, or when the gap is over ${perLitre.toFixed(1)} ¢/L.`,
+                 `Seuil de rentabilité : plus de ${Math.ceil((fuel + time) / (diff / 100))} L achetés, ou un écart supérieur à ${perLitre.toFixed(1)} ¢/L.`)
+            : '';
+    }
+    document.querySelectorAll('input, select').forEach(el => el.addEventListener('input', update));
+    update();
+})();
+</script>
+</body>
+</html>

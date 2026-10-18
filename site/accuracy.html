@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-en="Track Record — GasPrix MTL" data-fr="Fiabilité — GasPrix MTL">Track Record — GasPrix MTL</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="assets/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
@@ -42,14 +46,15 @@
         <div class="table-wrapper">
             <table class="history-table" id="holdout-table"></table>
         </div>
+        <p class="prob" id="network-note"></p>
     </div>
 </main>
 
 <script>
 (async () => {
-    let city;
+    let index, city;
     try {
-        ({ city } = await loadPage());
+        ({ index, city } = await loadPage());
     } catch (e) {
         return showError(document.getElementById('live-grid'), e);
     }
@@ -88,7 +93,15 @@
           band: [t.map(r => r.low ?? null), t.map(r => r.high ?? null)], bandColor: 'rgba(224,123,57,0.12)' },
     ]);
 
-    // Holdout table
+    // Holdout table (this city, and all cities)
+    const M = index.model;
+    document.getElementById('network-note').textContent = tr(
+        `Across all ${index.cities.length} cities, one shared model averages ±${M.holdout_mae.toFixed(2)} ¢/L over 1–28 days vs ±${M.holdout_persistence_mae.toFixed(2)} for “no change”. Market data is used only as it would have been published at the time, and tax changes only once announced.`,
+        `Pour les ${index.cities.length} villes, un modèle commun obtient ±${M.holdout_mae.toFixed(2)} ¢/L en moyenne sur 1 à 28 jours, contre ±${M.holdout_persistence_mae.toFixed(2)} pour « aucun changement ». Les données de marché sont utilisées seulement telles qu'elles étaient publiées à l'époque, et les changements de taxes seulement une fois annoncés.`);
+    if (!city.holdout) {
+        document.getElementById('holdout-table').innerHTML = `<tbody><tr><td>${tr('Not enough history for this city yet.', 'Pas encore assez d\'historique pour cette ville.')}</td></tr></tbody>`;
+        return;
+    }
     const H = city.holdout, rows = [1, 3, 7, 14, 21, 28];
     const pct = v => v == null ? '—' : Math.round(v * 100) + '%';
     document.getElementById('holdout-table').innerHTML = `

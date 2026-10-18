@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="EV vs Gas — GasPrix MTL" data-fr="VÉ ou essence — GasPrix MTL">EV vs Gas — GasPrix MTL</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="Electric vs Gas: Fuel Cost" data-fr="Électrique ou essence : coût d'énergie"></h1>
+        <p class="page-subtitle" id="subtitle"></p>
+    </div>
+
+    <div class="card card-narrow">
+        <div class="form-grid">
+            <div>
+                <label class="input-label" for="km" data-en="Kilometres per month" data-fr="Kilomètres par mois"></label>
+                <input type="number" id="km" class="spend-input" value="1500" min="0" step="100">
+            </div>
+            <div>
+                <label class="input-label" for="eff" data-en="Gas car (L/100 km)" data-fr="Voiture à essence (L/100 km)"></label>
+                <input type="number" id="eff" class="spend-input" value="8.5" min="1" step="0.1">
+            </div>
+            <div>
+                <label class="input-label" for="kwh" data-en="EV (kWh/100 km)" data-fr="VÉ (kWh/100 km)"></label>
+                <input type="number" id="kwh" class="spend-input" value="18" min="5" step="0.5">
+            </div>
+            <div>
+                <label class="input-label" for="rate" data-en="Electricity (¢/kWh)" data-fr="Électricité (¢/kWh)"></label>
+                <input type="number" id="rate" class="spend-input" min="1" step="0.1">
+            </div>
+            <div>
+                <label class="input-label" for="home" data-en="Share charged at home (%)" data-fr="Part rechargée à domicile (%)"></label>
+                <input type="number" id="home" class="spend-input" value="85" min="0" max="100" step="5">
+            </div>
+            <div>
+                <label class="input-label" for="public" data-en="Public fast charging (¢/kWh)" data-fr="Recharge rapide publique (¢/kWh)"></label>
+                <input type="number" id="public" class="spend-input" value="45" min="0" step="1">
+            </div>
+        </div>
+        <div class="metric-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+            <div class="metric"><div class="metric-label" data-en="Gas, per month" data-fr="Essence, par mois"></div><div class="metric-value" id="gas">—</div><div class="metric-note" id="gas-note"></div></div>
+            <div class="metric"><div class="metric-label" data-en="Electric, per month" data-fr="Électrique, par mois"></div><div class="metric-value" id="ev">—</div><div class="metric-note" id="ev-note"></div></div>
+            <div class="metric"><div class="metric-label" data-en="Difference per year" data-fr="Écart par année"></div><div class="metric-value better" id="year">—</div><div class="metric-note" id="year-note"></div></div>
+        </div>
+        <div class="recommendation" id="per100"></div>
+    </div>
+
+    <div class="disclaimer card-narrow">
+        <p data-en="Energy cost only: purchase price, insurance and maintenance are not included. Home charging includes ~10% charging losses. The electricity default is a rough residential rate for your province, so enter the rate from your own bill for a precise figure. Gas cost uses the next 4 weeks' forecast."
+           data-fr="Coût de l'énergie seulement : prix d'achat, assurance et entretien exclus. La recharge à domicile inclut environ 10 % de pertes. Le tarif d'électricité par défaut est une estimation approximative pour votre province; entrez celui de votre facture pour un calcul précis. Le coût de l'essence utilise la prévision des 4 prochaines semaines."></p>
+    </div>
+</main>
+
+<script>
+// Rough all-in residential rates (¢/kWh); users should enter their own.
+const DEFAULT_RATE = { QC: 8.0, ON: 13.0, BC: 11.5, AB: 18.0, SK: 17.0, MB: 10.5, NB: 14.0, NS: 19.0, PE: 17.0, NL: 14.0, YT: 17.0, NT: 30.0 };
+
+(async () => {
+    let city;
+    try {
+        ({ city } = await loadPage());
+    } catch (e) {
+        return showError(document.querySelector('.card'), e);
+    }
+    const gasPrice = city.forecast.reduce((s, f) => s + f.mid, 0) / city.forecast.length;
+    document.getElementById('subtitle').textContent = tr(
+        `${city.name}: regular gasoline averaging ${gasPrice.toFixed(1)} ¢/L over the next 4 weeks.`,
+        `${city.name} : essence ordinaire à ${gasPrice.toFixed(1)} ¢/L en moyenne sur les 4 prochaines semaines.`);
+    document.getElementById('rate').value = DEFAULT_RATE[city.province] || 15;
+
+    const num = id => Math.max(parseFloat(document.getElementById(id).value) || 0, 0);
+    function update() {
+        const km = num('km');
+        const gas = km * num('eff') / 100 * gasPrice / 100;
+        const share = Math.min(num('home'), 100) / 100;
+        const kwh = km * num('kwh') / 100;
+        const ev = kwh * share * 1.1 * num('rate') / 100 + kwh * (1 - share) * num('public') / 100;
+        document.getElementById('gas').textContent = fmt.money(gas);
+        document.getElementById('gas-note').textContent = tr(`${(km * num('eff') / 100).toFixed(0)} L`, `${(km * num('eff') / 100).toFixed(0)} L`);
+        document.getElementById('ev').textContent = fmt.money(ev);
+        document.getElementById('ev-note').textContent = `${kwh.toFixed(0)} kWh`;
+        const y = (gas - ev) * 12;
+        const el = document.getElementById('year');
+        el.textContent = fmt.money(Math.abs(y));
+        el.className = 'metric-value ' + (y >= 0 ? 'better' : 'worse');
+        document.getElementById('year-note').textContent = y >= 0 ? tr('saved with the EV', 'économisés avec le VÉ') : tr('more with the EV', 'de plus avec le VÉ');
+        const g100 = num('eff') * gasPrice / 100, e100 = km ? ev / km * 100 : 0;
+        document.getElementById('per100').textContent = tr(
+            `Per 100 km: ${fmt.money(g100)} on gas vs ${fmt.money(e100)} electric. Gas would have to fall to about ${(e100 / Math.max(num('eff'), 0.1) * 100).toFixed(0)} ¢/L to match.`,
+            `Par 100 km : ${fmt.money(g100)} en essence contre ${fmt.money(e100)} en électricité. L'essence devrait descendre à environ ${(e100 / Math.max(num('eff'), 0.1) * 100).toFixed(0)} ¢/L pour égaler.`);
+    }
+    document.querySelectorAll('input').forEach(el => el.addEventListener('input', update));
+    update();
+})();
+</script>
+</body>
+</html>

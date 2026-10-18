@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="Data, API & Widget — GasPrix MTL" data-fr="Données, API et widget — GasPrix MTL">Data, API & Widget — GasPrix MTL</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="Data, API & Widget" data-fr="Données, API et widget"></h1>
+        <p class="page-subtitle" data-en="Everything on this site is plain JSON, refreshed daily. Free to use with attribution; no key needed." data-fr="Tout le contenu du site est en JSON, mis à jour chaque jour. Utilisation libre avec attribution; aucune clé requise."></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="Embed a widget" data-fr="Intégrer un widget"></h2>
+            <p class="card-subtitle" data-en="A small live card for your site or blog." data-fr="Une petite carte en direct pour votre site ou blogue."></p>
+        </div>
+        <div class="form-grid">
+            <div>
+                <label class="input-label" for="w-city" data-en="City" data-fr="Ville"></label>
+                <select id="w-city" class="spend-input"></select>
+            </div>
+            <div>
+                <label class="input-label" for="w-lang" data-en="Language" data-fr="Langue"></label>
+                <select id="w-lang" class="spend-input"><option value="en">English</option><option value="fr">Français</option></select>
+            </div>
+        </div>
+        <iframe id="w-preview" title="Widget preview" style="border:0;width:380px;max-width:100%;height:140px"></iframe>
+        <pre class="code" id="w-code"></pre>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title" data-en="JSON endpoints" data-fr="Points d'accès JSON"></h2>
+            <p class="card-subtitle" data-en="Paths are relative to this site. Prices are ¢/L, taxes included, regular gasoline unless noted." data-fr="Chemins relatifs à ce site. Prix en ¢/L, taxes incluses, essence ordinaire sauf indication contraire."></p>
+        </div>
+        <div class="table-wrapper">
+            <table class="compact-table">
+                <thead><tr><th>Path</th><th data-en="Contents" data-fr="Contenu"></th></tr></thead>
+                <tbody>
+                    <tr><td><code>data/index.json</code></td><td data-en="Every city with coordinates, today's price, signal, 7-day expected move and chance of a rise; model accuracy." data-fr="Chaque ville avec coordonnées, prix du jour, signal, variation prévue sur 7 jours et probabilité de hausse; précision du modèle."></td></tr>
+                    <tr><td><code>data/&lt;city&gt;.json</code></td><td data-en="28-day forecast (low/mid/high, chance higher), weekly ranges, drivers, what-if scenarios, margin gauge, premium & diesel, track record, accuracy." data-fr="Prévision sur 28 jours (bas/milieu/haut, prob. de hausse), fourchettes hebdomadaires, facteurs, scénarios, jauge de marge, super et diesel, historique de fiabilité, précision."></td></tr>
+                    <tr><td><code>data/history/&lt;city&gt;.json</code></td><td data-en="Daily prices since 2016 (start date + array), weekday pattern, 2-year weekly price breakdown." data-fr="Prix quotidiens depuis 2016 (date de début + tableau), tendance par jour de semaine, composantes du prix hebdomadaires sur 2 ans."></td></tr>
+                    <tr><td><code>feeds/&lt;city&gt;.xml</code></td><td data-en="RSS: one item per day with the signal and 7-day forecast." data-fr="RSS : un élément par jour avec le signal et la prévision sur 7 jours."></td></tr>
+                    <tr><td><code>feeds/signals.xml</code></td><td data-en="RSS: only cities where prices are expected to move more than 2 ¢/L within 3 days." data-fr="RSS : seulement les villes où une variation de plus de 2 ¢/L est prévue en 3 jours."></td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="prob" data-en="City identifiers (e.g. montreal, quebec, toronto, st-john-s) are listed in data/index.json." data-fr="Les identifiants de ville (p. ex. montreal, quebec, toronto, st-john-s) sont listés dans data/index.json."></p>
+        <pre class="code" id="example"></pre>
+    </div>
+
+    <div class="disclaimer">
+        <p data-en="Retail prices © Kalibrate (charting.kalibrate.com); market data from FRED and the Bank of Canada. Forecasts are estimates, provided as is."
+           data-fr="Prix de détail © Kalibrate (charting.kalibrate.com); données de marché de FRED et de la Banque du Canada. Les prévisions sont des estimations, fournies telles quelles."></p>
+    </div>
+</main>
+
+<script>
+(async () => {
+    let index;
+    try {
+        ({ index } = await loadPage({ cityData: false }));
+    } catch (e) {
+        return showError(document.querySelector('.card'), e);
+    }
+    const base = location.href.replace(/[^/]*$/, '');
+    const citySel = document.getElementById('w-city'), langSel = document.getElementById('w-lang');
+    cityOptions(citySel, index, CITY);
+    langSel.value = LANG;
+    function update() {
+        const src = `${base}widget.html?city=${citySel.value}&lang=${langSel.value}`;
+        document.getElementById('w-preview').src = src;
+        document.getElementById('w-code').textContent =
+            `<iframe src="${src}" title="GasPrix" style="border:0;width:380px;max-width:100%;height:140px" loading="lazy"></iframe>`;
+    }
+    citySel.addEventListener('change', update);
+    langSel.addEventListener('change', update);
+    update();
+    document.getElementById('example').textContent =
+        `curl ${base}data/${CITY}.json\n\n// JavaScript\nconst city = await (await fetch('${base}data/${CITY}.json')).json();\nconsole.log(city.today_price, city.forecast[6].mid, city.forecast[6].prob_up);`;
+})();
+</script>
+</body>
+</html>
