@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GasPrix widget</title>
+    <title>PumpCast widget</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -38,7 +38,7 @@
             <div class="top"><span class="city">⛽ ${name}</span><span class="price">${c.today_price.toFixed(1)}<small style="font-size:13px"> ¢/L</small></span></div>
             <div class="sig ${c.signal.kind}">${sig}</div>
             <div class="row"><span>${t('In 7 days', 'Dans 7 jours')}: ${f7.low.toFixed(0)}–${f7.high.toFixed(0)} ¢</span><span>${t('Chance higher', 'Prob. hausse')}: ${Math.round(f7.prob_up * 100)}%</span></div>
-            <div class="row"><span>${t('Data', 'Données')}: ${c.data_end}</span><a href="index.html?city=${slug}&lang=${lang}" target="_blank" rel="noopener">GasPrix →</a></div>`;
+            <div class="row"><span>${t('Data', 'Données')}: ${c.data_end}</span><a href="index.html?city=${slug}&lang=${lang}" target="_blank" rel="noopener">PumpCast →</a></div>`;
     } catch (e) {
         el.textContent = t('Forecast unavailable', 'Prévision indisponible');
     }

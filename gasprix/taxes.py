@@ -13,6 +13,7 @@ Sources:
   - Federal fuel charge rates: canada.ca CRA "Fuel charge rates"; set to 0 on 2025-04-01
   - BC motor fuel & carbon tax: www2.gov.bc.ca "Motor fuel tax and carbon tax rates"
   - Québec: Revenu Québec / CAA-Québec "Composantes du prix de l'essence"
+  - Alberta Fuel Tax Relief Program: suspended from 2026-10-01 (announced 2026-09-22)
   - Other provinces: provincial finance ministries; cwf.ca fuel tax summary
 """
 
@@ -59,7 +60,8 @@ PROVINCIAL = {
     'ON': [('2000-01-01', 14.7), ('2022-07-01', 9.0)],
     'MB': [('2000-01-01', 14.0), ('2024-01-01', 0.0), ('2025-01-01', 12.5)],
     'SK': [('2000-01-01', 15.0)],
-    'AB': [('2000-01-01', 13.0), ('2022-04-01', 0.0), ('2024-01-01', 13.0)],
+    'AB': [('2000-01-01', 13.0), ('2022-04-01', 0.0), ('2024-01-01', 13.0),
+           ('2026-10-01', 0.0)],   # relief program: 0 when WTI averages over US$90 (reviewed quarterly)
     'BC': [('2000-01-01', 14.5)],
     'NB': [('2000-01-01', 15.5), ('2020-04-01', 10.87)],
     'NS': [('2000-01-01', 15.5)],
@@ -97,6 +99,7 @@ ANNOUNCED = {
     ('provincial', '2022-07-01', 'ON')    : '2022-04-04',
     ('provincial', '2022-04-01', 'AB')    : '2022-02-24',
     ('provincial', '2024-01-01', 'AB')    : '2023-11-30',
+    ('provincial', '2026-10-01', 'AB')    : '2026-09-22',
     ('provincial', '2024-01-01', 'MB')    : '2023-11-21',
     ('provincial', '2025-01-01', 'MB')    : '2024-11-01',
     ('provincial', '2022-04-01', 'NL')    : '2022-04-07',
@@ -135,6 +138,8 @@ def fixed_taxes_retail(province, city_slug, date, product='gasoline'):
 
 def fixed_tax_series(province, city_slug, index, product='gasoline'):
     """Daily Series of fixed_taxes_retail over a DatetimeIndex."""
+    if len(index) == 0:
+        return pd.Series(dtype=float, index=index)
     change_dates = sorted({pd.Timestamp(d) for sched in (
         FEDERAL_EXCISE[product], CARBON.get(province, []), PROVINCIAL.get(province, []),
         MUNICIPAL.get(city_slug, []), SALES_TAX.get(province, [])) for d, _ in sched} | {index.min()})
@@ -184,7 +189,7 @@ def scheduled_change(province, city_slug, origins, horizon, product='gasoline'):
         return (idx < s) & (tgt >= s)
 
     for comp, sched in _schedules(province, city_slug, product).items():
-        for (d0, v0), (d1, v1) in zip(sched, sched[1:]):
+        for (_, v0), (d1, v1) in zip(sched, sched[1:]):
             unknown = window(d1) & (idx < _announced(comp, d1, province))
             if unknown.any():
                 rate = components(province, city_slug, d1, product)['sales_rate']

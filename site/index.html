@@ -3,7 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title data-en="Forecast — GasPrix MTL" data-fr="Prévision — GasPrix MTL">Forecast — GasPrix MTL</title>
+    <title data-en="Forecast — PumpCast" data-fr="Prévision — PumpCast">Forecast — PumpCast</title>
+    <meta name="description" content="28-day gas price forecasts for 77 Canadian cities, with the best day to fill up.">
+    <meta property="og:title" content="PumpCast — Canadian gas price forecasts">
+    <meta property="og:description" content="28-day gas price forecasts for 77 Canadian cities, with the best day to fill up.">
+    <meta property="og:image" content="share/montreal.png">
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#2c5f8a">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
@@ -16,13 +20,17 @@
 </head>
 <body>
 <main class="main-content">
-    <div class="page-header">
-        <h1 class="page-title" id="title"></h1>
-        <p class="page-subtitle" data-en="4-week price forecast with calibrated 80% ranges" data-fr="Prévision sur 4 semaines avec fourchettes calibrées à 80 %"></p>
+    <div class="page-header card-header-row">
+        <div>
+            <h1 class="page-title" id="title"></h1>
+            <p class="page-subtitle" data-en="4-week price forecast with calibrated 80% ranges" data-fr="Prévision sur 4 semaines avec fourchettes calibrées à 80 %"></p>
+        </div>
+        <div><button class="btn-secondary" type="button" id="share" data-en="🔗 Share" data-fr="🔗 Partager"></button>
+            <span class="prob" id="share-status" aria-live="polite"></span></div>
     </div>
 
     <div class="signal" id="signal" hidden>
-        <div class="signal-icon" id="signal-icon"></div>
+        <div class="signal-icon" id="signal-icon" aria-hidden="true"></div>
         <div>
             <div class="signal-title" id="signal-title"></div>
             <div class="signal-text" id="signal-text"></div>
@@ -122,6 +130,16 @@ const DRIVER_LABELS = {
         return showError(document.getElementById('weekly-grid'), e);
     }
     document.getElementById('title').textContent = tr(`${city.name} Gas Price Forecast`, `Prévision du prix de l'essence — ${city.name}`);
+    document.getElementById('share').addEventListener('click', async () => {
+        const url = new URL(`c/${CITY}.html`, location.href).href;
+        const status = document.getElementById('share-status');
+        try {
+            if (navigator.share) await navigator.share({ title: document.title, url });
+            else { await navigator.clipboard.writeText(url); status.textContent = tr('Link copied', 'Lien copié'); }
+        } catch (e) {
+            status.textContent = url;   // clipboard blocked: show the link to copy by hand
+        }
+    });
     document.getElementById('data-date').textContent = fmt.date(city.data_end, { month: 'long', day: 'numeric', year: 'numeric' });
     if (city.holdout) {
         const m7 = city.holdout.mae[7], p7 = city.holdout.persistence_mae[7];
@@ -165,6 +183,10 @@ const DRIVER_LABELS = {
             { label: tr('Forecast', 'Prévision'), data: join(forecast.map(f => f.mid)), color: '#e07b39', dash: [6, 3],
               band: [join(forecast.map(f => f.low)), join(forecast.map(f => f.high))], bandColor: 'rgba(224,123,57,0.14)' },
         ]);
+        const last = forecast[forecast.length - 1];
+        describeChart(document.getElementById('forecastChart'), tr(
+            `${PRODUCT_NAMES[product][0]} price forecast for ${city.name}: ${today.toFixed(1)} ¢/L now, ${forecast[6].mid.toFixed(1)} in 7 days (range ${forecast[6].low.toFixed(1)}–${forecast[6].high.toFixed(1)}), ${last.mid.toFixed(1)} in 4 weeks (range ${last.low.toFixed(1)}–${last.high.toFixed(1)}).`,
+            `Prévision du prix (${PRODUCT_NAMES[product][1].toLowerCase()}) pour ${city.name} : ${today.toFixed(1)} ¢/L maintenant, ${forecast[6].mid.toFixed(1)} dans 7 jours (${forecast[6].low.toFixed(1)}–${forecast[6].high.toFixed(1)}), ${last.mid.toFixed(1)} dans 4 semaines (${last.low.toFixed(1)}–${last.high.toFixed(1)}).`));
         document.getElementById('today-price').textContent = fmt.cents(today);
         document.getElementById('chart-sub').textContent = product === 'regular'
             ? tr('The shaded band is where the price landed 80% of the time in out-of-sample testing.', 'La bande ombrée correspond à l\'endroit où le prix s\'est retrouvé 80 % du temps lors des tests hors échantillon.')
@@ -180,9 +202,10 @@ const DRIVER_LABELS = {
     const drivers = document.getElementById('drivers');
     const hs = Object.keys(city.explain);
     const exToggle = document.getElementById('explain-toggle');
+    exToggle.setAttribute('role', 'group');
     exToggle.innerHTML = hs.map(h => `<button type="button" data-h="${h}">${tr(`${h} days`, `${h} jours`)}</button>`).join('');
     function renderDrivers(h) {
-        exToggle.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.h === h));
+        setPressed(exToggle, exToggle.querySelector(`button[data-h="${h}"]`));
         const parts = Object.entries(city.explain[h]).filter(([, v]) => Math.abs(v) >= 0.05).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
         const total = Object.values(city.explain[h]).reduce((a, b) => a + b, 0);
         const max = Math.max(1, ...parts.map(([, v]) => Math.abs(v)));
@@ -216,12 +239,16 @@ const DRIVER_LABELS = {
         scenChart.data.datasets[1].data = series;
         scenChart.update();
         document.getElementById('shock-value').textContent = `${v > 0 ? '+' : ''}${v}%`;
+        describeChart(document.getElementById('scenarioChart'), tr(
+            `Forecast with a ${v}% wholesale shock: ${series[6].toFixed(1)} ¢/L in 7 days and ${series[27].toFixed(1)} in 4 weeks, vs ${city.forecast[6].mid.toFixed(1)} and ${city.forecast[27].mid.toFixed(1)} without.`,
+            `Prévision avec un choc de ${v} % : ${series[6].toFixed(1)} ¢/L dans 7 jours et ${series[27].toFixed(1)} dans 4 semaines, contre ${city.forecast[6].mid.toFixed(1)} et ${city.forecast[27].mid.toFixed(1)} sans choc.`));
         const d7 = series[6] - city.forecast[6].mid, d28 = series[27] - city.forecast[27].mid;
         document.getElementById('scenario-line').textContent = v === 0 ? '' : tr(
             `A ${v > 0 ? '+' : ''}${v}% jump would move the forecast ${fmt.signed(d7)} ¢/L in a week and ${fmt.signed(d28)} ¢/L in 4 weeks.`,
             `Un choc de ${v > 0 ? '+' : ''}${v} % déplacerait la prévision de ${fmt.signed(d7)} ¢/L en une semaine et de ${fmt.signed(d28)} ¢/L en 4 semaines.`);
     }
     shock.addEventListener('input', renderShock);
+    renderShock();
 
     // Weekly cards
     const grid = document.getElementById('weekly-grid');

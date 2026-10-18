@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="Road Trip Planner — PumpCast" data-fr="Planificateur de voyage — PumpCast">Road Trip Planner — PumpCast</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="Road Trip Fuel Planner" data-fr="Planificateur de carburant pour voyage"></h1>
+        <p class="page-subtitle" data-en="Where along your route is gas cheapest on the day you'll pass through?" data-fr="Où l'essence est-elle la moins chère sur votre trajet, le jour où vous y passerez?"></p>
+    </div>
+
+    <div class="card">
+        <div class="form-grid">
+            <div>
+                <label class="input-label" for="from" data-en="From" data-fr="Départ"></label>
+                <select id="from" class="spend-input"></select>
+            </div>
+            <div>
+                <label class="input-label" for="to" data-en="To" data-fr="Arrivée"></label>
+                <select id="to" class="spend-input"></select>
+            </div>
+            <div>
+                <label class="input-label" for="depart" data-en="Departure day" data-fr="Jour du départ"></label>
+                <select id="depart" class="spend-input"></select>
+            </div>
+            <div>
+                <label class="input-label" for="kmday" data-en="Km driven per day" data-fr="Km parcourus par jour"></label>
+                <input type="number" id="kmday" class="spend-input" value="700" min="100" step="50">
+            </div>
+            <div>
+                <label class="input-label" for="corridor" data-en="Max detour from route (km)" data-fr="Détour maximal (km)"></label>
+                <input type="number" id="corridor" class="spend-input" value="40" min="5" step="5">
+            </div>
+            <div>
+                <label class="input-label" for="tank" data-en="Litres per fill-up" data-fr="Litres par plein"></label>
+                <input type="number" id="tank" class="spend-input" value="50" min="5" step="5">
+            </div>
+        </div>
+        <div class="recommendation" id="verdict"></div>
+        <div id="map" style="height:380px; margin-top:1rem"></div>
+        <div class="table-wrapper" style="margin-top:1rem"><table class="compact-table" id="stops"></table></div>
+        <p class="prob" data-en="Distances are straight-line between city centres, so roads add roughly 15–25%. Prices are the forecast for the day you reach each city (or today's price within the next day)." data-fr="Les distances sont à vol d'oiseau entre les centres-villes; les routes ajoutent environ 15 à 25 %. Les prix sont la prévision pour le jour où vous atteignez chaque ville."></p>
+    </div>
+</main>
+
+<script>
+const R = 6371;
+const rad = d => d * Math.PI / 180;
+function haversine(a, b) {
+    const dLat = rad(b.lat - a.lat), dLon = rad(b.lon - a.lon);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+}
+/** Position of p along segment a→b: distance from a (km, projected) and distance from the line (km). */
+function along(a, b, p) {
+    const kx = Math.cos(rad((a.lat + b.lat) / 2)) * 111.32, ky = 110.57;
+    const bx = (b.lon - a.lon) * kx, by = (b.lat - a.lat) * ky;
+    const px = (p.lon - a.lon) * kx, py = (p.lat - a.lat) * ky;
+    const len2 = bx * bx + by * by;
+    const t = len2 ? Math.max(0, Math.min(1, (px * bx + py * by) / len2)) : 0;
+    return { t, from: t * Math.sqrt(len2), off: Math.hypot(px - t * bx, py - t * by) };
+}
+
+(async () => {
+    let index;
+    try {
+        ({ index } = await loadPage({ cityData: false }));
+    } catch (e) {
+        return showError(document.querySelector('.card'), e);
+    }
+    const bySlug = Object.fromEntries(index.cities.map(c => [c.slug, c]));
+    const q = new URLSearchParams(location.search);
+    cityOptions(document.getElementById('from'), index, q.get('from') || (bySlug[CITY] ? CITY : 'montreal'));
+    cityOptions(document.getElementById('to'), index, q.get('to') || 'toronto');
+    const depart = document.getElementById('depart');
+    for (let i = 0; i < 21; i++) {
+        const d = new Date(Date.now() + i * 864e5).toISOString().slice(0, 10);
+        depart.add(new Option(i === 0 ? tr('Today', "Aujourd'hui") : fmt.date(d, { weekday: 'short', month: 'short', day: 'numeric' }), i));
+    }
+
+    const cache = {};
+    const cityData = slug => cache[slug] || (cache[slug] = getJSON(`data/${slug}.json`));
+    const map = L.map('map', { scrollWheelZoom: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 12, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
+    const layer = L.layerGroup().addTo(map);
+    const num = id => Math.max(parseFloat(document.getElementById(id).value) || 0, 0);
+
+    let run = 0;
+    async function update() {
+        const id = ++run;
+        const a = bySlug[document.getElementById('from').value], b = bySlug[document.getElementById('to').value];
+        const total = haversine(a, b);
+        const corridor = num('corridor'), kmDay = Math.max(num('kmday'), 1), startDay = +depart.value;
+        const stops = index.cities.map(c => ({ c, ...along(a, b, c) }))
+            .filter(s => s.off <= corridor || s.c.slug === a.slug || s.c.slug === b.slug)
+            .sort((x, y) => x.from - y.from);
+        const datas = await Promise.all(stops.map(s => cityData(s.c.slug)));
+        if (id !== run) return;
+        stops.forEach((s, i) => {
+            const d = datas[i];
+            const day = startDay + Math.floor(s.from / kmDay);
+            s.day = day;
+            s.price = day === 0 ? d.today_price : (d.forecast[Math.min(day, 28) - 1] || d.forecast[27]).mid;
+        });
+        const cheapest = stops.reduce((x, y) => y.price < x.price ? y : x);
+        const priciest = stops.reduce((x, y) => y.price > x.price ? y : x);
+        const save = (priciest.price - cheapest.price) * num('tank') / 100;
+        document.getElementById('verdict').textContent = stops.length < 2
+            ? tr('No other cities near this route; try a wider detour.', 'Aucune autre ville près de ce trajet; élargissez le détour.')
+            : tr(`About ${Math.round(total)} km. Cheapest stop: ${cheapest.c.name} (${cheapest.price.toFixed(1)} ¢/L). Filling there instead of ${priciest.c.name} saves about ${fmt.money(save)} on ${num('tank')} L.`,
+                 `Environ ${Math.round(total)} km. Arrêt le moins cher : ${cheapest.c.name} (${cheapest.price.toFixed(1)} ¢/L). Y faire le plein plutôt qu'à ${priciest.c.name} économise environ ${fmt.money(save)} sur ${num('tank')} L.`);
+        document.getElementById('stops').innerHTML = `<thead><tr><th>${tr('City', 'Ville')}</th><th class="num">${tr('Km from start', 'Km du départ')}</th><th>${tr('Arrive', 'Arrivée')}</th><th class="num">${tr('Expected price', 'Prix prévu')}</th></tr></thead><tbody>` +
+            stops.map(s => `<tr><td>${esc(s.c.name)}${s === cheapest ? ' 🏆' : ''}</td><td class="num">${Math.round(s.from)}</td>
+                <td>${s.day === 0 ? tr('Today', "Aujourd'hui") : fmt.date(new Date(Date.now() + s.day * 864e5).toISOString().slice(0, 10), { weekday: 'short', month: 'short', day: 'numeric' })}</td>
+                <td class="num ${s === cheapest ? 'better' : s === priciest ? 'worse' : ''}">${s.price.toFixed(1)}</td></tr>`).join('') + '</tbody>';
+        layer.clearLayers();
+        L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: '#2c5f8a', weight: 3, dashArray: '6 6' }).addTo(layer);
+        stops.forEach(s => {
+            const color = s === cheapest ? '#2a8a5a' : s === priciest ? '#d0603a' : '#7a8a9a';
+            L.marker([s.c.lat, s.c.lon], { icon: L.divIcon({ className: '', html: `<span class="price-pin" style="background:${color}">${s.price.toFixed(1)}</span>`, iconSize: null }), title: s.c.name }).addTo(layer);
+        });
+        map.fitBounds([[a.lat, a.lon], [b.lat, b.lon]], { padding: [40, 40] });
+    }
+    document.querySelectorAll('input, select:not(.city-select)').forEach(el => el.addEventListener('input', update));
+    update();
+})();
+</script>
+</body>
+</html>

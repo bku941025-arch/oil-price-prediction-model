@@ -1,0 +1,23 @@
+name: Site freshness
+
+# Fails (and GitHub emails you) if the live site stops serving fresh forecasts,
+# e.g. Render is down or the daily pipeline stopped publishing.
+on:
+  schedule:
+    - cron: '0 17 * * *'   # daily, a few hours after the pipeline
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check data freshness
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://gas-price-mtl.onrender.com' }}
+        run: |
+          # Render's free tier sleeps; allow time for a cold start
+          json=$(curl -sf --retry 3 --retry-delay 20 --max-time 90 "$SITE_URL/data/index.json")
+          generated=$(echo "$json" | python3 -c "import json,sys; print(json.load(sys.stdin)['generated_at'])")
+          age_h=$(python3 -c "from datetime import datetime; print(int((datetime.utcnow() - datetime.strptime('$generated', '%Y-%m-%d %H:%M')).total_seconds() // 3600))")
+          echo "Site data generated at $generated UTC ($age_h h ago)"
+          if [ "$age_h" -gt 36 ]; then echo "::error::Live forecasts are $age_h hours old"; exit 1; fi

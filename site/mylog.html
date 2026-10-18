@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-en="My Fill-ups — PumpCast" data-fr="Mes pleins — PumpCast">My Fill-ups — PumpCast</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2c5f8a">
+    <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/app.js"></script>
+</head>
+<body>
+<main class="main-content">
+    <div class="page-header">
+        <h1 class="page-title" data-en="My Fill-ups" data-fr="Mes pleins"></h1>
+        <p class="page-subtitle" data-en="Log what you pay and see how you compare with your city's average. Saved only in this browser; nothing is sent anywhere." data-fr="Notez ce que vous payez et comparez-vous à la moyenne de votre ville. Enregistré seulement dans ce navigateur; rien n'est envoyé."></p>
+    </div>
+
+    <div class="card card-narrow">
+        <form id="add" class="form-grid" novalidate>
+            <div>
+                <label class="input-label" for="f-date" data-en="Date" data-fr="Date"></label>
+                <input type="date" id="f-date" class="spend-input" required>
+            </div>
+            <div>
+                <label class="input-label" for="f-litres" data-en="Litres" data-fr="Litres"></label>
+                <input type="number" id="f-litres" class="spend-input" min="1" step="0.01" required>
+            </div>
+            <div>
+                <label class="input-label" for="f-price" data-en="Price paid (¢/L)" data-fr="Prix payé (¢/L)"></label>
+                <input type="number" id="f-price" class="spend-input" min="50" max="400" step="0.1" required>
+            </div>
+            <div style="align-self:end">
+                <button class="btn-primary" type="submit" data-en="Add fill-up" data-fr="Ajouter"></button>
+            </div>
+        </form>
+        <div class="field-error" id="f-error" hidden data-en="Enter a date, litres and a price between 50 and 400 ¢/L." data-fr="Entrez une date, des litres et un prix entre 50 et 400 ¢/L."></div>
+    </div>
+
+    <div class="card">
+        <div class="metric-grid" id="summary"></div>
+        <div class="table-wrapper"><table class="compact-table" id="log"></table></div>
+        <div class="btn-row">
+            <button class="btn-secondary" type="button" id="export" data-en="Export CSV" data-fr="Exporter en CSV"></button>
+            <button class="btn-secondary" type="button" id="clear" data-en="Delete all…" data-fr="Tout supprimer…"></button>
+            <span id="confirm-clear" hidden>
+                <span data-en="Delete every fill-up in this browser?" data-fr="Supprimer tous les pleins de ce navigateur?"></span>
+                <button class="btn-secondary" type="button" id="clear-yes" data-en="Yes, delete" data-fr="Oui, supprimer"></button>
+                <button class="btn-secondary" type="button" id="clear-no" data-en="Cancel" data-fr="Annuler"></button>
+            </span>
+        </div>
+    </div>
+</main>
+
+<script>
+const KEY = 'pumpcast_fillups';
+function load() { try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { return []; } }
+function save(rows) { try { localStorage.setItem(KEY, JSON.stringify(rows)); return true; } catch (e) { return false; } }
+
+(async () => {
+    let index, city, hist;
+    try {
+        ({ index, city } = await loadPage());
+        hist = await getJSON(`data/history/${CITY}.json`);
+    } catch (e) {
+        return showError(document.querySelector('.card'), e);
+    }
+    const start = new Date(hist.start + 'T00:00:00Z');
+    const avgOn = d => {
+        const i = Math.round((new Date(d + 'T00:00:00Z') - start) / 864e5);
+        return i >= 0 && i < hist.prices.length ? hist.prices[i] : null;
+    };
+    document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('f-price').placeholder = city.today_price.toFixed(1);
+
+    function render() {
+        const rows = load().filter(r => r.city === CITY).sort((a, b) => b.date.localeCompare(a.date));
+        let litres = 0, spent = 0, saved = 0, compared = 0;
+        for (const r of rows) {
+            litres += r.litres; spent += r.litres * r.price / 100;
+            const avg = avgOn(r.date);
+            if (avg != null) { saved += (avg - r.price) * r.litres / 100; compared++; }
+        }
+        const tile = (l, v, n) => `<div class="metric"><div class="metric-label">${l}</div><div class="metric-value">${v}</div><div class="metric-note">${n || ''}</div></div>`;
+        document.getElementById('summary').innerHTML =
+            tile(tr('Fill-ups', 'Pleins'), rows.length, esc(city.name)) +
+            tile(tr('Total spent', 'Total dépensé'), fmt.money(spent), `${litres.toFixed(0)} L`) +
+            tile(tr('Average paid', 'Prix moyen payé'), litres ? (spent / litres * 100).toFixed(1) + ' ¢/L' : '—') +
+            tile(tr('vs city average', 'vs moyenne de la ville'), compared ? fmt.money(saved) : '—',
+                 compared ? (saved >= 0 ? tr('saved', 'économisés') : tr('more than average', 'de plus que la moyenne')) + ` (${compared})` : tr('needs fill-ups from the past year', 'nécessite des pleins de la dernière année'));
+        document.getElementById('log').innerHTML = rows.length ? `
+            <thead><tr><th>${tr('Date', 'Date')}</th><th class="num">L</th><th class="num">${tr('Paid', 'Payé')}</th><th class="num">${tr('City avg', 'Moy. ville')}</th><th class="num">${tr('Cost', 'Coût')}</th><th></th></tr></thead>
+            <tbody>${rows.map(r => { const a = avgOn(r.date); return `<tr>
+                <td>${fmt.date(r.date, { year: 'numeric', month: 'short', day: 'numeric' })}</td><td class="num">${r.litres.toFixed(1)}</td>
+                <td class="num">${r.price.toFixed(1)}</td><td class="num ${a == null ? '' : a >= r.price ? 'better' : 'worse'}">${a == null ? '—' : a.toFixed(1)}</td>
+                <td class="num">${fmt.money(r.litres * r.price / 100)}</td>
+                <td><button class="btn-secondary" style="padding:0.15rem 0.5rem" data-id="${r.id}" aria-label="${tr('Delete', 'Supprimer')}">✕</button></td></tr>`; }).join('')}</tbody>`
+            : `<tbody><tr><td class="muted">${tr('No fill-ups logged for this city yet.', 'Aucun plein noté pour cette ville.')}</td></tr></tbody>`;
+    }
+
+    document.getElementById('add').addEventListener('submit', e => {
+        e.preventDefault();
+        const date = document.getElementById('f-date').value;
+        const litres = parseFloat(document.getElementById('f-litres').value);
+        const price = parseFloat(document.getElementById('f-price').value);
+        const bad = !date || !(litres > 0) || !(price >= 50 && price <= 400);
+        document.getElementById('f-error').hidden = !bad;
+        if (bad) return;
+        const rows = load();
+        rows.push({ id: Date.now().toString(36), city: CITY, date, litres, price });
+        if (!save(rows)) {
+            document.getElementById('f-error').textContent = tr('This browser is blocking storage, so fill-ups can’t be saved.', 'Ce navigateur bloque le stockage; les pleins ne peuvent pas être enregistrés.');
+            document.getElementById('f-error').hidden = false;
+            return;
+        }
+        document.getElementById('f-litres').value = '';
+        render();
+    });
+    document.getElementById('log').addEventListener('click', e => {
+        const b = e.target.closest('button[data-id]');
+        if (!b) return;
+        save(load().filter(r => r.id !== b.dataset.id));
+        render();
+    });
+    document.getElementById('export').addEventListener('click', () => {
+        const rows = load();
+        const csv = 'city,date,litres,price_cents_per_litre\n' + rows.map(r => `${r.city},${r.date},${r.litres},${r.price}`).join('\n');
+        downloadText('pumpcast-fillups.csv', csv, 'text/csv');
+    });
+    const confirmBox = document.getElementById('confirm-clear');
+    document.getElementById('clear').addEventListener('click', () => { confirmBox.hidden = false; });
+    document.getElementById('clear-no').addEventListener('click', () => { confirmBox.hidden = true; });
+    document.getElementById('clear-yes').addEventListener('click', () => { save([]); confirmBox.hidden = true; render(); });
+    render();
+})();
+</script>
+</body>
+</html>

@@ -9,11 +9,14 @@ const NAV = [
         { file: 'trip.html',    en: 'Trip cost',        fr: 'Coût du trajet' },
         { file: 'compare.html', en: 'Worth the drive?', fr: 'Ça vaut le détour?' },
         { file: 'ev.html',      en: 'EV vs gas',        fr: 'VÉ ou essence' },
+        { file: 'roadtrip.html', en: 'Road trip planner', fr: 'Planificateur de voyage' },
+        { file: 'mylog.html',   en: 'My fill-ups',      fr: 'Mes pleins' },
     ] },
     { en: 'Insights', fr: 'Analyses', items: [
         { file: 'breakdown.html', en: "What's in the price", fr: 'Composantes du prix' },
         { file: 'history.html',   en: 'Price history',       fr: 'Historique des prix' },
         { file: 'accuracy.html',  en: 'Track record',        fr: 'Fiabilité' },
+        { file: 'model.html',     en: 'How the model works', fr: 'Fonctionnement du modèle' },
         { file: 'api.html',       en: 'Data, API & widget',  fr: 'Données, API et widget' },
     ] },
 ];
@@ -30,7 +33,7 @@ function pref(name, fallback) {
     }
 }
 
-const LANG = pref('lang', (navigator.language || 'en').startsWith('fr') ? 'fr' : 'en') === 'fr' ? 'fr' : 'en';
+const LANG = pref('lang', 'en') === 'fr' ? 'fr' : 'en';   // English by default; French is remembered once chosen
 let CITY = pref('city', 'montreal');
 
 /** Pick the string for the current language: tr('Hello', 'Bonjour'). */
@@ -73,12 +76,21 @@ function renderChrome(index) {
     document.documentElement.lang = LANG;
 
     const item = p => `<a href="${link(p.file)}" class="nav-link ${p.file === here ? 'active' : ''}">${p[LANG]}</a>`;
+    const skip = document.createElement('a');
+    skip.className = 'skip-link';
+    skip.href = '#main';
+    skip.textContent = tr('Skip to content', 'Aller au contenu');
+    document.body.prepend(skip);
+    const main = document.querySelector('main');
+    if (main) main.id = 'main';
+
     const nav = document.createElement('nav');
     nav.className = 'navbar';
+    nav.setAttribute('aria-label', tr('Main', 'Principal'));
     nav.innerHTML = `
         <a href="${link('index.html')}" class="nav-brand">
             <span class="brand-icon">⛽</span>
-            <span class="brand-name">GasPrix<span class="brand-mtl">MTL</span></span>
+            <span class="brand-name">Pump<span class="brand-mtl">Cast</span></span>
         </a>
         <div class="nav-links">
             ${NAV.map(p => p.items ? `
@@ -93,7 +105,7 @@ function renderChrome(index) {
             <a href="${link(here, { lang: 'fr' })}" class="lang-btn ${LANG === 'fr' ? 'active' : ''}">FR</a>
             <select class="city-select" aria-label="${tr('City', 'Ville')}"></select>
         </div>`;
-    document.body.prepend(nav);
+    skip.after(nav);
 
     // Close an open menu when clicking elsewhere or opening another
     nav.querySelectorAll('details.nav-menu').forEach(d => d.addEventListener('toggle', () => {
@@ -172,16 +184,42 @@ function productToggle(el, city, onChange) {
     const products = ['regular', ...Object.keys(city.products || {})];
     let current = pref('product', 'regular');
     if (!products.includes(current)) current = 'regular';
-    el.innerHTML = products.map(p => `<button type="button" data-p="${p}" class="${p === current ? 'active' : ''}">${PRODUCT_NAMES[p][LANG === 'fr' ? 1 : 0]}</button>`).join('');
+    el.setAttribute('role', 'group');
+    el.setAttribute('aria-label', tr('Fuel type', 'Type de carburant'));
+    el.innerHTML = products.map(p => `<button type="button" data-p="${p}" class="${p === current ? 'active' : ''}" aria-pressed="${p === current}">${PRODUCT_NAMES[p][LANG === 'fr' ? 1 : 0]}</button>`).join('');
     el.addEventListener('click', e => {
         const b = e.target.closest('button');
         if (!b) return;
         current = b.dataset.p;
         try { localStorage.setItem('gasprix_product', current); } catch (err) { /* private mode */ }
-        el.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+        setPressed(el, b);
         onChange(current);
     });
     onChange(current);
+}
+
+/** Mark one button in a segmented control as active/pressed. */
+function setPressed(group, button) {
+    group.querySelectorAll('button').forEach(x => {
+        x.classList.toggle('active', x === button);
+        x.setAttribute('aria-pressed', String(x === button));
+    });
+}
+
+/** Give a chart canvas a text alternative for screen readers. */
+function describeChart(canvas, text) {
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', text);
+}
+
+/** Download text as a file (calendar events, CSV). */
+function downloadText(filename, text, type) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 const CHART_FONT = { family: 'DM Sans', size: 11 };

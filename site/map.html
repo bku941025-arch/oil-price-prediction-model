@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title data-en="Price Map — GasPrix MTL" data-fr="Carte des prix — GasPrix MTL">Price Map — GasPrix MTL</title>
+    <title data-en="Price Map — PumpCast" data-fr="Carte des prix — PumpCast">Price Map — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#2c5f8a">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
@@ -88,7 +88,7 @@
         const b = e.target.closest('button');
         if (!b) return;
         mode = b.dataset.m;
-        document.querySelectorAll('#mode button').forEach(x => x.classList.toggle('active', x === b));
+        setPressed(document.getElementById('mode'), b);
         draw();
     });
     draw();

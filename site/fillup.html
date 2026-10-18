@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title data-en="Best Day to Fill Up — GasPrix MTL" data-fr="Meilleur jour — GasPrix MTL">Best Day to Fill Up — GasPrix MTL</title>
+    <title data-en="Best Day to Fill Up — PumpCast" data-fr="Meilleur jour — PumpCast">Best Day to Fill Up — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#2c5f8a">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
@@ -22,6 +22,7 @@
 
     <div class="card" style="border-left: 4px solid var(--accent);">
         <div id="rec" class="loading-msg" data-en="Loading..." data-fr="Chargement..."></div>
+        <div class="btn-row"><button class="btn-secondary" type="button" id="ics" data-en="📅 Add reminder to calendar" data-fr="📅 Ajouter un rappel au calendrier"></button></div>
     </div>
 
     <div class="card">
@@ -47,7 +48,25 @@
 </main>
 
 <script>
-let fc = null, today = null;
+let fc = null, today = null, bestDay = null, cityName = '', product = 'regular';
+
+function icsReminder() {
+    if (!bestDay) return;
+    const d = bestDay.date.replace(/-/g, '');
+    const next = new Date(bestDay.date + 'T00:00:00Z'); next.setUTCDate(next.getUTCDate() + 1);
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    const title = tr(`Fill up today (${cityName})`, `Faire le plein aujourd'hui (${cityName})`);
+    const fuel = tr(PRODUCT_NAMES[product][0], PRODUCT_NAMES[product][1]).toLowerCase();
+    const desc = tr(`PumpCast expects ${fuel} at ${bestDay.mid.toFixed(1)} ¢/L (range ${bestDay.low.toFixed(1)}–${bestDay.high.toFixed(1)}), the cheapest weekday this week.`,
+                    `PumpCast prévoit ${product === 'diesel' ? 'le diesel' : "l'essence " + fuel} à ${bestDay.mid.toFixed(1)} ¢/L (${bestDay.low.toFixed(1)}–${bestDay.high.toFixed(1)}), le jour de semaine le moins cher.`);
+    const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//PumpCast//EN', 'BEGIN:VEVENT',
+        `UID:${d}-${CITY}@pumpcast`, `DTSTAMP:${stamp}`, `DTSTART;VALUE=DATE:${d}`,
+        `DTEND;VALUE=DATE:${next.toISOString().slice(0, 10).replace(/-/g, '')}`,
+        `SUMMARY:${title}`, `DESCRIPTION:${desc.replace(/[,;]/g, m => '\\' + m)}`,
+        'BEGIN:VALARM', 'TRIGGER:PT8H', 'ACTION:DISPLAY', `DESCRIPTION:${title}`, 'END:VALARM',
+        'END:VEVENT', 'END:VCALENDAR'].join('\r\n');
+    downloadText(`pumpcast-${CITY}-${bestDay.date}.ics`, ics, 'text/calendar');
+}
 
 function renderSavings() {
     const tank = Math.min(Math.max(parseFloat(document.getElementById('tank-input').value) || 50, 1), 300);
@@ -59,6 +78,7 @@ function renderSavings() {
     const rec = document.getElementById('rec');
     rec.className = '';
     const flat = worst.mid - best.mid < 1;
+    bestDay = best;
     rec.innerHTML = `
         <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:1.5rem;">
             <div>
@@ -103,8 +123,11 @@ function renderDays() {
 (async () => {
     try {
         const { city } = await loadPage();
-        productToggle(document.getElementById('product-toggle'), city, product => {
-            const p = productForecast(city, product);
+        cityName = city.name;
+        document.getElementById('ics').addEventListener('click', icsReminder);
+        productToggle(document.getElementById('product-toggle'), city, chosen => {
+            product = chosen;
+            const p = productForecast(city, chosen);
             fc = p.forecast.slice(0, 7);
             today = p.today;
             renderDays();

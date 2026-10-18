@@ -16,17 +16,28 @@ Called by GitHub Actions daily. Also callable manually:
 
 import json
 import os
+import subprocess
 import sys
 import warnings
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import pandas as pd
 
 from gasprix import data, features, insights, publish
 from gasprix.cities import CITIES, PROVINCE_NAMES
-from gasprix.model import (INTERVAL, DirectEnsemble, holdout_evaluation, interval,
-                           long_predictions, metrics_by_horizon, prob_above)
+from gasprix.model import (
+    INTERVAL,
+    Calibration,
+    DirectEnsemble,
+    holdout_evaluation,
+    interval,
+    long_predictions,
+    metrics_by_horizon,
+    prob_above,
+    reliability,
+    volatility_groups,
+)
 
 ROOT         = os.path.dirname(os.path.abspath(__file__))
 SITE_DATA    = os.path.join(ROOT, 'site', 'data')
@@ -43,6 +54,7 @@ EXPLAIN_HORIZONS          = [7, 14, 28]
 LOG_HORIZONS              = [1, 7, 14, 28]
 SCENARIO_SHOCKS           = (-0.2, -0.1, 0.1, 0.2)
 COVERAGE_WARN             = (0.70, 0.90)
+PUBLISHED_HISTORY_DAYS    = 365   # Kalibrate data is © Kalibrate: publish only the last year
 FORCE_PUBLISH             = os.environ.get('FORCE_PUBLISH') == '1'
 
 LOG_COLUMNS = ['made_on', 'city', 'horizon', 'target_date', 'base', 'pred', 'low', 'high', 'source']
@@ -50,6 +62,17 @@ LOG_COLUMNS = ['made_on', 'city', 'horizon', 'target_date', 'base', 'pred', 'low
 
 class PublishBlocked(Exception):
     pass
+
+
+def model_version():
+    """Git commit of the code that produced this forecast (GitHub sets MODEL_VERSION)."""
+    v = os.environ.get('MODEL_VERSION')
+    if not v:
+        try:
+            v = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, cwd=ROOT).stdout.strip()
+        except OSError:
+            v = ''
+    return v[:7] or 'unknown'
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -184,6 +207,7 @@ def product_forecast(product_prices, slug, origin, reg_forecast, reg_today):
 
 def history_payload(gas):
     s = gas.dropna()
+    s = s[s.index > s.index.max() - pd.Timedelta(days=PUBLISHED_HISTORY_DAYS)]
     return {'start': s.index.min().strftime('%Y-%m-%d'),
             'prices': [_r(v) for v in s.reindex(pd.date_range(s.index.min(), s.index.max())).values]}
 
@@ -229,6 +253,10 @@ def run():
     # 3–4. Holdout score and gate
     hold_long, _ = holdout_evaluation(panel, Y, prices)
     hold = metrics_by_horizon(hold_long)
+    groups = volatility_groups(panel)
+    calib = Calibration(hold_long, groups)
+    rel = reliability(hold_long, groups)
+    print(f"  Reliability (2nd half of holdout): {rel['coverage']}  CRPS {rel['crps_model']} vs {rel['crps_persistence']}")
     hold_mae = float(hold['mae'].mean())
     prev = _read_json(METRICS_PATH)
     print(f'  Holdout MAE {hold_mae:.3f} (persistence {hold["persistence_mae"].mean():.3f})')
@@ -240,9 +268,9 @@ def run():
     model = DirectEnsemble().fit(panel, Y, last_date=max(last_seen[prices.columns]))
     latest = panel.groupby(level=0).tail(1)
     fc = long_predictions(model, latest, prices)
-    lo, hi = interval(fc, hold)
+    lo, hi = interval(fc, calib)
     fc['low'], fc['high'] = lo, hi
-    fc['prob_up'] = prob_above(fc, hold, fc['base'].values)
+    fc['prob_up'] = prob_above(fc, calib, fc['base'].values)
     base_change = model.predict_change(latest)          # ex-tax market change, rows x horizons
     tax_by_h = {h: fc.loc[fc['horizon'] == h, 'pred'].values - fc.loc[fc['horizon'] == h, 'base'].values
                 - base_change[h].values for h in EXPLAIN_HORIZONS}
@@ -254,7 +282,7 @@ def run():
     log = load_log()
     log = log[log['made_on'] != today]
     if not (log['source'] == 'backtest').any():
-        b_lo, b_hi = interval(hold_long, hold)
+        b_lo, b_hi = interval(hold_long, calib)
         seed = hold_long.assign(made_on=hold_long['origin'], low=b_lo, high=b_hi, source='backtest')
         log = pd.concat([seed.loc[seed['horizon'] == 7, LOG_COLUMNS], log], ignore_index=True)
     new = fc[fc['horizon'].isin(LOG_HORIZONS)].assign(made_on=today, source='live')[LOG_COLUMNS]
@@ -262,7 +290,11 @@ def run():
 
     # 7. Per-city payloads
     hold_city = {c: metrics_by_horizon(d) for c, d in hold_long.groupby('city')}
-    prev_index = {c['slug']: c for c in _read_json(os.path.join(SITE_DATA, 'index.json')).get('cities', [])}
+    prev_signal = {}
+    if os.path.exists(SIGNALS_PATH):
+        past = pd.read_csv(SIGNALS_PATH)
+        past = past[past['date'] < today.strftime('%Y-%m-%d')].sort_values('date')
+        prev_signal = past.groupby('city')['kind'].last().to_dict()
     signals_rows, sites = [], {}
     for slug, f in fc.groupby('city', sort=False):
         city = CITIES[slug]
@@ -271,9 +303,9 @@ def run():
         origin = f['origin'].iloc[0]
         row = latest.loc[slug].iloc[0]
         today_price = float(f['base'].iloc[0])
-        forecast = [{'date': t.strftime('%Y-%m-%d'), 'horizon': int(h), 'low': _r(l), 'mid': _r(m),
+        forecast = [{'date': t.strftime('%Y-%m-%d'), 'horizon': int(h), 'low': _r(lo), 'mid': _r(m),
                      'high': _r(u), 'prob_up': _r(p, 2)}
-                    for t, h, m, l, u, p in zip(f['target_date'], f['horizon'], f['pred'], f['low'],
+                    for t, h, m, lo, u, p in zip(f['target_date'], f['horizon'], f['pred'], f['low'],
                                                 f['high'], f['prob_up'])]
         signal = price_signal(today_price, forecast)
         hc = hold_city.get(slug)
@@ -281,7 +313,7 @@ def run():
         site = {
             'city': slug, 'name': city.name, 'province': city.province,
             'generated_at': now.strftime('%Y-%m-%d %H:%M'), 'data_end': origin.strftime('%Y-%m-%d'),
-            'today_price': _r(today_price), 'interval': INTERVAL,
+            'today_price': _r(today_price), 'interval': INTERVAL, 'volatility': groups.get(slug),
             'forecast': forecast, 'weekly': weekly_summary(forecast), 'signal': signal,
             'historical': [{'date': t.strftime('%Y-%m-%d'), 'price': _r(p)} for t, p in g.iloc[-120:].items()],
             'explain': {int(h): {k: _r(v, 2) for k, v in explained[h].loc[(slug, origin)].items()}
@@ -309,12 +341,16 @@ def run():
         _write_json(os.path.join(SITE_DATA, 'history', f'{slug}.json'), {
             **history_payload(prices[slug]),
             'weekday': insights.weekday_effect(prices[slug]),
-            'breakdown': insights.breakdown_series(prices[slug], aligned, slug),
+            'breakdown': insights.breakdown_series(prices[slug], aligned, slug, weeks=52),
         })
 
     national = np.mean([s['today_price'] for s in sites.values()])
     live_all = live_accuracy(log, None, prices, today)
     warnings_out = []
+    for a in insights.tax_anomalies(prices, aligned):
+        warnings_out.append(f"Possible missing tax change: {a['province']} prices moved {a['change']:+.1f} ¢/L "
+                            f"on {a['date']} without a matching wholesale move. Forecasts there may be off.")
+        print(f'  WARNING: {warnings_out[-1]}')
     if live_all['n'] >= 200 and live_all.get('coverage') is not None and not (
             COVERAGE_WARN[0] <= live_all['coverage'] <= COVERAGE_WARN[1]):
         warnings_out.append(f"Live 80% range coverage is {live_all['coverage']:.0%} over the last "
@@ -335,6 +371,12 @@ def run():
             'holdout_persistence_by_h': {int(h): _r(v, 2) for h, v in hold['persistence_mae'].items()},
             'shrink': {int(h): w for h, w in model.shrink.items()},
             'training_rows': int(len(panel)), 'live_accuracy': live_all,
+            'reliability': rel,
+            'version': model_version(), 'trained_at': now.strftime('%Y-%m-%d %H:%M'),
+            'training_window': [panel.index.get_level_values(1).min().strftime('%Y-%m-%d'),
+                                panel.index.get_level_values(1).max().strftime('%Y-%m-%d')],
+            'features': model.columns,
+            'volatility_groups': {g: sorted(c for c, v in groups.items() if v == g) for g in ('calm', 'mid', 'volatile')},
         },
         'warnings': warnings_out,
     }
@@ -356,8 +398,7 @@ def run():
     write_feeds(signals, sites)
 
     # Outbound channels (each is a no-op unless configured)
-    sent = sum(publish.ntfy(site, prev_index.get(slug, {}).get('signal', {}).get('kind'))
-               for slug, site in sites.items())
+    sent = sum(publish.ntfy(site, prev_signal.get(slug)) for slug, site in sites.items())
     movers = sorted(index['cities'], key=lambda c: -abs(c['change_7d'] or 0))[:3]
     text = publish.social_text(sites.get(index['default_city'], next(iter(sites.values()))), movers)
     posted = [name for name, fn in (('Bluesky', publish.post_bluesky), ('Mastodon', publish.post_mastodon)) if fn(text)]
@@ -381,17 +422,17 @@ def write_feeds(signals, sites):
                 'description': f'{name}: {r.price:.1f} ¢/L. {publish.SIGNAL_TEXT[r.kind][0]} '
                                f'({r.change_3d:+.1f} ¢/L over 3 days; 7-day forecast {r.forecast_7:.1f}).',
                 'guid': f'{r.city}-{r.date:%Y-%m-%d}',
-                'date': r.date.to_pydatetime().replace(tzinfo=timezone.utc),
+                'date': r.date.to_pydatetime().replace(tzinfo=UTC),
             })
         return out
 
     for slug in sites:
         _write_text(os.path.join(SITE_FEEDS, f'{slug}.xml'), publish.rss(
-            f'GasPrix — {sites[slug]["name"]}', f'{publish.SITE_URL}/?city={slug}',
+            f'PumpCast — {sites[slug]["name"]}', f'{publish.SITE_URL}/?city={slug}',
             f'Daily gas price forecast for {sites[slug]["name"]}', items(s[s['city'] == slug])))
     changes = s[s['kind'] != 'steady']
     _write_text(os.path.join(SITE_FEEDS, 'signals.xml'), publish.rss(
-        'GasPrix — price signals', publish.SITE_URL,
+        'PumpCast — price signals', publish.SITE_URL,
         'Cities where prices are expected to move more than 2 ¢/L within 3 days', items(changes)))
 
 

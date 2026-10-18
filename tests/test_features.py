@@ -13,6 +13,7 @@ def _synthetic(days=500, seed=0):
     market = pd.DataFrame({
         'wti_usd': 80 + rng.normal(0, 1, days).cumsum(),
         'rbob_usd': 2.5 + rng.normal(0, 0.02, days).cumsum(),
+        'gulf_usd': 2.4 + rng.normal(0, 0.02, days).cumsum(),
         'cadusd_fred': 1.35 + rng.normal(0, 0.002, days).cumsum(),
         'cadusd': 1.35 + rng.normal(0, 0.002, days).cumsum(),
     }, index=idx)
@@ -58,3 +59,17 @@ def test_panel_has_city_and_province_codes():
     panel = features.build_panel(prices, data.align_market(market, gas.index))
     assert set(panel.index.get_level_values(0)) == {'montreal', 'toronto'}
     assert panel.groupby(level=0)['province'].nunique().eq(1).all()
+
+
+def test_tax_anomaly_detector_flags_unexplained_province_jump():
+    from gasprix import insights
+    gas, market = _synthetic(days=200, seed=1)
+    flat = pd.Series(170.0, index=gas.index)
+    prices = pd.DataFrame({s: flat.copy() for s in ('toronto', 'ottawa', 'hamilton', 'montreal')})
+    jump_day = gas.index[-3]
+    while jump_day.dayofweek >= 5:
+        jump_day -= pd.Timedelta(days=1)
+    prices.loc[prices.index >= jump_day, ['toronto', 'ottawa', 'hamilton']] += 12.0
+    market = market.assign(rbob_usd=2.5)       # no wholesale move to explain it
+    found = insights.tax_anomalies(prices, data.align_market(market, gas.index))
+    assert [(a['province'], a['date']) for a in found] == [('ON', jump_day.strftime('%Y-%m-%d'))]

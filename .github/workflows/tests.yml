@@ -16,6 +16,12 @@ jobs:
           python-version: '3.11'
           cache: pip
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest
-      - name: Run tests
-        run: pytest -q
+        run: |
+          pip install -r requirements-dev.txt
+          playwright install --with-deps chromium
+      - name: Lint
+        run: ruff check .
+      - name: Unit tests
+        run: pytest -q --ignore=tests/e2e
+      - name: Browser smoke test
+        run: pytest -q tests/e2e

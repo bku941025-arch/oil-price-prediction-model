@@ -1,0 +1,10 @@
+line-length = 120
+target-version = "py311"
+extend-exclude = ["Notebooks", ".venv"]
+
+[lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E221", "E241", "E501", "B905"]   # aligned assignments/dicts are used for readability
+
+[lint.isort]
+known-first-party = ["gasprix"]

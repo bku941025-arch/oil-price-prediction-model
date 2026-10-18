@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title data-en="Data, API & Widget — GasPrix MTL" data-fr="Données, API et widget — GasPrix MTL">Data, API & Widget — GasPrix MTL</title>
+    <title data-en="Data, API & Widget — PumpCast" data-fr="Données, API et widget — PumpCast">Data, API & Widget — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
     <meta name="theme-color" content="#2c5f8a">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
@@ -16,7 +16,7 @@
 <main class="main-content">
     <div class="page-header">
         <h1 class="page-title" data-en="Data, API & Widget" data-fr="Données, API et widget"></h1>
-        <p class="page-subtitle" data-en="Everything on this site is plain JSON, refreshed daily. Free to use with attribution; no key needed." data-fr="Tout le contenu du site est en JSON, mis à jour chaque jour. Utilisation libre avec attribution; aucune clé requise."></p>
+        <p class="page-subtitle" data-en="Forecasts are plain JSON, refreshed daily, free to use with attribution and no key. Retail price data is © Kalibrate, so only the past 12 months are published." data-fr="Les prévisions sont en JSON, mises à jour chaque jour, libres d'utilisation avec attribution et sans clé. Les données de prix de détail sont © Kalibrate; seuls les 12 derniers mois sont publiés."></p>
     </div>
 
     <div class="card">
@@ -40,6 +40,20 @@
 
     <div class="card">
         <div class="card-header">
+            <h2 class="card-title" data-en="Download forecasts as CSV" data-fr="Télécharger les prévisions en CSV"></h2>
+            <p class="card-subtitle" data-en="For budgeting fleets or spreadsheets: 28-day forecasts (low, expected, high) for the cities you pick." data-fr="Pour budgéter un parc de véhicules ou un tableur : prévisions sur 28 jours (bas, attendu, haut) pour les villes choisies."></p>
+        </div>
+        <label class="input-label" for="csv-cities" data-en="Cities (hold Ctrl/⌘ to pick several)" data-fr="Villes (maintenez Ctrl/⌘ pour en choisir plusieurs)"></label>
+        <select id="csv-cities" class="spend-input" multiple size="8" style="max-width:none;width:100%"></select>
+        <div class="btn-row">
+            <button class="btn-primary" type="button" id="csv-go" data-en="Download CSV" data-fr="Télécharger le CSV"></button>
+            <button class="btn-secondary" type="button" id="csv-all" data-en="All cities" data-fr="Toutes les villes"></button>
+        </div>
+        <p class="prob" id="csv-status" aria-live="polite"></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
             <h2 class="card-title" data-en="JSON endpoints" data-fr="Points d'accès JSON"></h2>
             <p class="card-subtitle" data-en="Paths are relative to this site. Prices are ¢/L, taxes included, regular gasoline unless noted." data-fr="Chemins relatifs à ce site. Prix en ¢/L, taxes incluses, essence ordinaire sauf indication contraire."></p>
         </div>
@@ -49,7 +63,7 @@
                 <tbody>
                     <tr><td><code>data/index.json</code></td><td data-en="Every city with coordinates, today's price, signal, 7-day expected move and chance of a rise; model accuracy." data-fr="Chaque ville avec coordonnées, prix du jour, signal, variation prévue sur 7 jours et probabilité de hausse; précision du modèle."></td></tr>
                     <tr><td><code>data/&lt;city&gt;.json</code></td><td data-en="28-day forecast (low/mid/high, chance higher), weekly ranges, drivers, what-if scenarios, margin gauge, premium & diesel, track record, accuracy." data-fr="Prévision sur 28 jours (bas/milieu/haut, prob. de hausse), fourchettes hebdomadaires, facteurs, scénarios, jauge de marge, super et diesel, historique de fiabilité, précision."></td></tr>
-                    <tr><td><code>data/history/&lt;city&gt;.json</code></td><td data-en="Daily prices since 2016 (start date + array), weekday pattern, 2-year weekly price breakdown." data-fr="Prix quotidiens depuis 2016 (date de début + tableau), tendance par jour de semaine, composantes du prix hebdomadaires sur 2 ans."></td></tr>
+                    <tr><td><code>data/history/&lt;city&gt;.json</code></td><td data-en="Daily prices for the past 12 months (start date + array), weekday pattern, 1-year weekly price breakdown." data-fr="Prix quotidiens des 12 derniers mois (date de début + tableau), tendance par jour de semaine, composantes du prix hebdomadaires sur 1 an."></td></tr>
                     <tr><td><code>feeds/&lt;city&gt;.xml</code></td><td data-en="RSS: one item per day with the signal and 7-day forecast." data-fr="RSS : un élément par jour avec le signal et la prévision sur 7 jours."></td></tr>
                     <tr><td><code>feeds/signals.xml</code></td><td data-en="RSS: only cities where prices are expected to move more than 2 ¢/L within 3 days." data-fr="RSS : seulement les villes où une variation de plus de 2 ¢/L est prévue en 3 jours."></td></tr>
                 </tbody>
@@ -81,11 +95,27 @@
         const src = `${base}widget.html?city=${citySel.value}&lang=${langSel.value}`;
         document.getElementById('w-preview').src = src;
         document.getElementById('w-code').textContent =
-            `<iframe src="${src}" title="GasPrix" style="border:0;width:380px;max-width:100%;height:140px" loading="lazy"></iframe>`;
+            `<iframe src="${src}" title="PumpCast" style="border:0;width:380px;max-width:100%;height:140px" loading="lazy"></iframe>`;
     }
     citySel.addEventListener('change', update);
     langSel.addEventListener('change', update);
     update();
+    const csvSel = document.getElementById('csv-cities');
+    cityOptions(csvSel, index, CITY);
+    async function exportCsv(slugs) {
+        const status = document.getElementById('csv-status');
+        if (!slugs.length) { status.textContent = tr('Pick at least one city.', 'Choisissez au moins une ville.'); return; }
+        status.textContent = tr(`Preparing ${slugs.length} cities…`, `Préparation de ${slugs.length} villes…`);
+        const rows = ['city,province,generated_at,date,horizon_days,low_cents_per_litre,expected_cents_per_litre,high_cents_per_litre,chance_higher'];
+        for (const slug of slugs) {
+            const c = await getJSON(`data/${slug}.json`);
+            for (const f of c.forecast) rows.push([slug, c.province, c.generated_at, f.date, f.horizon, f.low, f.mid, f.high, f.prob_up].join(','));
+        }
+        downloadText(`pumpcast-forecasts-${index.generated_at.slice(0, 10)}.csv`, rows.join('\n'), 'text/csv');
+        status.textContent = tr(`Downloaded ${rows.length - 1} rows.`, `${rows.length - 1} lignes téléchargées.`);
+    }
+    document.getElementById('csv-go').addEventListener('click', () => exportCsv([...csvSel.selectedOptions].map(o => o.value)));
+    document.getElementById('csv-all').addEventListener('click', () => exportCsv(index.cities.map(c => c.slug)));
     document.getElementById('example').textContent =
         `curl ${base}data/${CITY}.json\n\n// JavaScript\nconst city = await (await fetch('${base}data/${CITY}.json')).json();\nconsole.log(city.today_price, city.forecast[6].mid, city.forecast[6].prob_up);`;
 })();

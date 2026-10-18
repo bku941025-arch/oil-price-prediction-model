@@ -10,7 +10,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'webapp'))
 
 import app as webapp  # noqa: E402
-import pipeline       # noqa: E402
+
+import pipeline  # noqa: E402
 from gasprix import publish  # noqa: E402
 
 
@@ -22,6 +23,7 @@ def client():
 @pytest.mark.parametrize('path', ['/', '/index.html', '/map.html', '/fillup.html', '/budget.html', '/trip.html',
                                   '/compare.html', '/ev.html', '/breakdown.html', '/history.html',
                                   '/accuracy.html', '/api.html', '/widget.html', '/assets/app.js',
+                                  '/roadtrip.html', '/mylog.html', '/model.html', '/c/montreal.html',
                                   '/manifest.webmanifest', '/sw.js'])
 def test_pages_are_served(client, path):
     assert client.get(path).status_code == 200
@@ -42,7 +44,9 @@ def test_api_rejects_unknown_city(client):
 
 
 def test_price_signal_thresholds():
-    fc = lambda d: [{'mid': 190 + d}] * 3
+    def fc(d):
+        return [{'mid': 190 + d}] * 3
+
     assert pipeline.price_signal(190, fc(3))['kind'] == 'fill_now'
     assert pipeline.price_signal(190, fc(-3))['kind'] == 'wait'
     assert pipeline.price_signal(190, fc(1))['kind'] == 'steady'

@@ -1,7 +1,7 @@
 /* sw.js — Offline support: pages and assets cache-first, data network-first. */
-const VERSION = 'gasprix-v1';
+const VERSION = 'pumpcast-v3';
 const SHELL = ['index.html', 'map.html', 'fillup.html', 'budget.html', 'trip.html', 'compare.html', 'ev.html',
-               'breakdown.html', 'history.html', 'accuracy.html', 'api.html',
+               'breakdown.html', 'history.html', 'accuracy.html', 'api.html', 'model.html', 'roadtrip.html', 'mylog.html',
                'assets/style.css', 'assets/app.js', 'assets/icon.svg', 'manifest.webmanifest'];
 
 self.addEventListener('install', e => {

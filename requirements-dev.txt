@@ -1,0 +1,8 @@
+# Development, tests and the archived notebooks
+-r requirements.txt
+pytest==9.1.1
+ruff==0.17.1
+playwright==1.64.0
+pillow==13.0.0
+xgboost==3.4.1
+joblib==1.6.0
