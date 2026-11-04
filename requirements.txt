@@ -2,11 +2,11 @@
 # always use the same versions; Dependabot proposes upgrades as pull requests.
 Flask==3.1.3
 gunicorn==26.2.0
-holidays==0.106
+holidays==0.107
 lightgbm==4.7.0
-numpy==2.4.6
+numpy==2.5.4
 openpyxl==3.1.5
-pandas==3.0.6
+pandas==3.1.0
 requests==2.34.2
 schedule==1.2.2
 scikit-learn==1.9.1
