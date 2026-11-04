@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-en="Track Record — PumpCast" data-fr="Fiabilité — PumpCast">Track Record — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <meta name="theme-color" content="#2c5f8a">
+    <meta name="theme-color" content="#2b59c3">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="assets/app.js"></script>
@@ -88,9 +88,9 @@
         `Each orange point is what we predicted 7 days earlier. ${liveFrom >= 0 ? `Live forecasts from ${t[liveFrom].date}; earlier points` : 'All points shown'} are backtest forecasts from a model that hadn't seen that period.`,
         `Chaque point orange est notre prévision faite 7 jours plus tôt. ${liveFrom >= 0 ? `Prévisions en direct à partir du ${t[liveFrom].date}; les points antérieurs` : 'Tous les points'} sont des prévisions rétrospectives d'un modèle n'ayant pas vu cette période.`);
     bandChart(document.getElementById('trackChart'), t.map(r => r.date), [
-        { label: tr('Actual price', 'Prix réel'), data: t.map(r => r.actual), color: '#2c5f8a' },
-        { label: tr('Forecast made 7 days earlier', 'Prévision faite 7 jours plus tôt'), data: t.map(r => r.pred ?? null), color: '#e07b39', dash: [4, 3],
-          band: [t.map(r => r.low ?? null), t.map(r => r.high ?? null)], bandColor: 'rgba(224,123,57,0.12)' },
+        { label: tr('Actual price', 'Prix réel'), data: t.map(r => r.actual), role: 'actual' },
+        { label: tr('Forecast made 7 days earlier', 'Prévision faite 7 jours plus tôt'), data: t.map(r => r.pred ?? null), role: 'forecast', dash: [4, 3],
+          band: [t.map(r => r.low ?? null), t.map(r => r.high ?? null)] },
     ]);
 
     const scored = t.filter(r => r.pred != null && r.actual != null);

@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-en="What's in the Price — PumpCast" data-fr="Composantes du prix — PumpCast">What's in the Price — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <meta name="theme-color" content="#2c5f8a">
+    <meta name="theme-color" content="#2b59c3">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="assets/app.js"></script>
@@ -53,12 +53,12 @@
 
 <script>
 const PARTS = [
-    ['crude',     '#5b6b7f', 'Crude oil', 'Pétrole brut'],
-    ['refining',  '#8aa1b8', 'Refining', 'Raffinage'],
-    ['retail',    '#e0a040', 'Station & distribution', 'Station et distribution'],
-    ['fuel_tax',  '#2c5f8a', 'Fuel taxes (federal + provincial)', 'Taxes sur les carburants (fédérale + provinciale)'],
-    ['carbon',    '#3aaa6e', 'Carbon charge', 'Redevance carbone'],
-    ['sales_tax', '#b36b9e', 'Sales tax (GST/HST/QST)', 'Taxe de vente (TPS/TVH/TVQ)'],
+    ['crude',     '#64748b', 'Crude oil', 'Pétrole brut'],
+    ['refining',  '#94a3b8', 'Refining', 'Raffinage'],
+    ['retail',    '#f59e0b', 'Station & distribution', 'Station et distribution'],
+    ['fuel_tax',  '#3b6fe0', 'Fuel taxes (federal + provincial)', 'Taxes sur les carburants (fédérale + provinciale)'],
+    ['carbon',    '#16a34a', 'Carbon charge', 'Redevance carbone'],
+    ['sales_tax', '#a855f7', 'Sales tax (GST/HST/QST)', 'Taxe de vente (TPS/TVH/TVQ)'],
 ];
 
 (async () => {
@@ -88,8 +88,8 @@ const PARTS = [
         `Prix à la pompe avant taxes, moins le prix de gros. Zone ombrée : les 80 % centraux de l'année passée (${g.low.toFixed(1)}–${g.high.toFixed(1)} ¢/L).`);
     const p = g.percentile;
     document.getElementById('gauge-text').textContent = p >= 0.8
-        ? tr(`Margins are high: higher than ${Math.round(p * 100)}% of the past year. Historically, high margins tend to come down, which pulls the forecast lower.`,
-             `Les marges sont élevées : plus que ${Math.round(p * 100)} % de l'année passée. Historiquement, des marges élevées ont tendance à redescendre, ce qui tire la prévision vers le bas.`)
+        ? tr(`Margins are high: ${p >= 0.995 ? 'the highest in a year' : `higher than ${Math.round(p * 100)}% of the past year`}. Historically, high margins tend to come down, which pulls the forecast lower.`,
+             `Les marges sont élevées : ${p >= 0.995 ? 'du jamais vu en un an' : `plus que ${Math.round(p * 100)} % de l'année passée`}. Historiquement, des marges élevées ont tendance à redescendre, ce qui tire la prévision vers le bas.`)
         : p <= 0.2
         ? tr(`Margins are thin: lower than ${Math.round((1 - p) * 100)}% of the past year. Stations tend to rebuild margins, which pushes prices up.`,
              `Les marges sont minces : plus basses que ${Math.round((1 - p) * 100)} % de l'année passée. Les stations ont tendance à les rétablir, ce qui pousse les prix à la hausse.`)

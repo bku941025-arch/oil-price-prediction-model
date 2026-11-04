@@ -9,46 +9,62 @@
     <meta property="og:description" content="28-day gas price forecasts for 77 Canadian cities, with the best day to fill up.">
     <meta property="og:image" content="share/montreal.png">
     <link rel="manifest" href="manifest.webmanifest">
-    <meta name="theme-color" content="#2c5f8a">
+    <meta name="theme-color" content="#2b59c3">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="assets/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="assets/app.js"></script>
 </head>
 <body>
 <main class="main-content">
-    <div class="page-header card-header-row">
-        <div>
-            <h1 class="page-title" id="title"></h1>
-            <p class="page-subtitle" data-en="4-week price forecast with calibrated 80% ranges" data-fr="Prévision sur 4 semaines avec fourchettes calibrées à 80 %"></p>
+    <section class="hero" aria-labelledby="title">
+        <div class="hero-grid">
+            <div>
+                <div class="hero-top">
+                    <span class="hero-eyebrow"><span class="dot" aria-hidden="true"></span><span id="live-label"></span></span>
+                    <button class="icon-btn hero-btn" type="button" id="share" aria-label="Share" title="Share">🔗</button>
+                </div>
+                <h1 class="hero-city" id="title"></h1>
+                <div class="hero-price">
+                    <span class="value" id="today-price">—</span><span class="unit">¢/L</span>
+                    <span class="pill" id="product-pill"></span>
+                </div>
+                <div class="hero-meta">
+                    <span class="pill" id="pill-7d"></span>
+                    <span class="pill" id="pill-rank"></span>
+                </div>
+                <svg class="hero-spark" id="spark" viewBox="0 0 300 56" preserveAspectRatio="none" role="img"></svg>
+            </div>
+            <div class="hero-side">
+                <div class="label" data-en="Chance higher in 7 days" data-fr="Probabilité de hausse dans 7 jours"></div>
+                <svg class="gauge-svg" id="gauge" viewBox="0 0 200 120" role="img">
+                    <defs><linearGradient id="gauge-grad" x1="0" x2="1"><stop offset="0" stop-color="#4ade80"/><stop offset="0.5" stop-color="#facc15"/><stop offset="1" stop-color="#fb923c"/></linearGradient></defs>
+                    <path class="track" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke-width="16" stroke-linecap="round"/>
+                    <path class="fill" id="gauge-fill" d="M20 100 A80 80 0 0 1 180 100" fill="none" stroke="url(#gauge-grad)" stroke-width="16" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+                    <text x="100" y="92" text-anchor="middle" font-size="34" font-weight="700" id="prob7">—</text>
+                </svg>
+                <div class="verdict" id="signal-title"></div>
+                <div class="sub" id="signal-text"></div>
+            </div>
         </div>
-        <div><button class="btn-secondary" type="button" id="share" data-en="🔗 Share" data-fr="🔗 Partager"></button>
-            <span class="prob" id="share-status" aria-live="polite"></span></div>
-    </div>
-
-    <div class="signal" id="signal" hidden>
-        <div class="signal-icon" id="signal-icon" aria-hidden="true"></div>
-        <div>
-            <div class="signal-title" id="signal-title"></div>
-            <div class="signal-text" id="signal-text"></div>
-        </div>
-    </div>
+        <span class="sr-only" id="share-status" aria-live="polite"></span>
+    </section>
 
     <div class="status-bar">
-        <div class="status-item">
-            <span class="status-label" data-en="Latest price" data-fr="Dernier prix"></span>
-            <span class="status-value" id="today-price">—</span>
-        </div>
         <div class="status-item">
             <span class="status-label" data-en="Data up to" data-fr="Données jusqu'au"></span>
             <span class="status-value" id="data-date">—</span>
         </div>
+        <a class="status-item" id="best-tile" style="text-decoration:none">
+            <span class="status-label" data-en="Cheapest weekday ahead" data-fr="Jour le moins cher"></span>
+            <span class="status-value" id="best-day">—</span>
+        </a>
         <div class="status-item">
-            <span class="status-label" data-en="Chance higher in a week" data-fr="Probabilité de hausse dans 7 jours"></span>
-            <span class="status-value" id="prob7">—</span>
+            <span class="status-label" data-en="In 4 weeks" data-fr="Dans 4 semaines"></span>
+            <span class="status-value" id="in28">—</span>
         </div>
         <div class="status-item">
             <span class="status-label" data-en="7-day error, past year" data-fr="Erreur à 7 jours, an passé"></span>
@@ -65,7 +81,28 @@
             <div class="seg" id="product-toggle"></div>
         </div>
         <div class="chart-container"><canvas id="forecastChart"></canvas></div>
+        <div class="scrubber">
+            <input type="range" id="scrub" min="1" max="28" value="7" aria-label="Day ahead">
+            <div class="scrub-readout" aria-live="polite">
+                <span class="date" id="scrub-date"></span>
+                <span class="mid" id="scrub-mid"></span>
+                <span class="range" id="scrub-range"></span>
+                <span class="odds" id="scrub-odds"></span>
+            </div>
+            <div class="scrub-ticks" aria-hidden="true"><span data-en="Tomorrow" data-fr="Demain"></span><span data-en="1 week" data-fr="1 semaine"></span><span data-en="2 weeks" data-fr="2 semaines"></span><span data-en="3 weeks" data-fr="3 semaines"></span><span data-en="4 weeks" data-fr="4 semaines"></span></div>
+        </div>
         <p class="prob" id="prob-line"></p>
+    </div>
+
+    <div class="card">
+        <div class="card-header card-header-row">
+            <div>
+                <h2 class="card-title" data-en="Nearby cities" data-fr="Villes à proximité"></h2>
+                <p class="card-subtitle" id="nearby-sub"></p>
+            </div>
+            <a class="btn-secondary" id="nearby-map" data-en="Open map" data-fr="Ouvrir la carte"></a>
+        </div>
+        <div class="nearby" id="nearby"></div>
     </div>
 
     <div class="card">
@@ -129,17 +166,48 @@ const DRIVER_LABELS = {
     } catch (e) {
         return showError(document.getElementById('weekly-grid'), e);
     }
-    document.getElementById('title').textContent = tr(`${city.name} Gas Price Forecast`, `Prévision du prix de l'essence — ${city.name}`);
+    document.getElementById('title').textContent = tr(`${city.name} gas price forecast`, `Prévision du prix de l'essence — ${city.name}`);
+    document.getElementById('live-label').textContent = tr(`Updated ${city.generated_at.slice(0, 10)}`, `Mis à jour le ${city.generated_at.slice(0, 10)}`);
     document.getElementById('share').addEventListener('click', async () => {
         const url = new URL(`c/${CITY}.html`, location.href).href;
-        const status = document.getElementById('share-status');
         try {
             if (navigator.share) await navigator.share({ title: document.title, url });
-            else { await navigator.clipboard.writeText(url); status.textContent = tr('Link copied', 'Lien copié'); }
+            else { await navigator.clipboard.writeText(url); toast(tr('Link copied', 'Lien copié')); }
         } catch (e) {
-            status.textContent = url;   // clipboard blocked: show the link to copy by hand
+            if (e.name !== 'AbortError') toast(url);   // clipboard blocked: show the link to copy by hand
         }
     });
+
+    // Hero: 7-day move, rank among cities, gauge, sparkline
+    const ch7 = city.forecast[6].mid - city.today_price;
+    const p7 = document.getElementById('pill-7d');
+    p7.textContent = `${ch7 > 0.5 ? '▲' : ch7 < -0.5 ? '▼' : '▶'} ${fmt.signed(ch7)}¢ ${tr('in 7 days', 'en 7 jours')}`;
+    p7.classList.add(ch7 > 0.5 ? 'up' : ch7 < -0.5 ? 'down' : 'flat');
+    const ranked = index.cities.slice().sort((a, b) => a.today_price - b.today_price);
+    const rank = ranked.findIndex(c => c.slug === CITY) + 1;
+    document.getElementById('pill-rank').textContent = tr(`#${rank} cheapest of ${ranked.length}`, `${rank}e moins chère sur ${ranked.length}`);
+    const prob = city.forecast[6].prob_up;
+    document.getElementById('prob7').textContent = fmt.pct(prob);
+    requestAnimationFrame(() => setTimeout(() => {
+        document.getElementById('gauge-fill').style.strokeDashoffset = String(100 - prob * 100);
+    }, 120));
+    describeChart(document.getElementById('gauge'), tr(`${fmt.pct(prob)} chance the price is higher in 7 days`, `${fmt.pct(prob)} de probabilité de hausse dans 7 jours`));
+    (function sparkline() {
+        const svg = document.getElementById('spark');
+        const past = city.historical.slice(-30).map(h => h.price), fut = city.forecast.slice(0, 14).map(f => f.mid);
+        const all = [...past, ...fut], lo = Math.min(...all), hi = Math.max(...all), n = all.length;
+        const x = i => (i / (n - 1)) * 300, y = v => 50 - ((v - lo) / (hi - lo || 1)) * 44;
+        const path = (arr, off) => arr.map((v, i) => `${i ? 'L' : 'M'}${x(i + off).toFixed(1)},${y(v).toFixed(1)}`).join('');
+        svg.innerHTML = `<path d="${path(past, 0)}" fill="none" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/>
+            <path d="${path([past[past.length - 1], ...fut], past.length - 1)}" fill="none" stroke="#ffd2a8" stroke-width="2.2" stroke-dasharray="4 3"/>
+            <circle cx="${x(past.length - 1)}" cy="${y(past[past.length - 1])}" r="3.5" fill="#fff"/>`;
+        describeChart(svg, tr('Last 30 days and the next 2 weeks', '30 derniers jours et 2 prochaines semaines'));
+    })();
+    const wk = city.forecast.slice(0, 7).filter(f => !isWeekend(f.date));
+    const best = wk.reduce((a, b) => (b.mid < a.mid ? b : a), wk[0]);
+    document.getElementById('best-day').textContent = `${fmt.date(best.date, { weekday: 'short', month: 'short', day: 'numeric' })} · ${best.mid.toFixed(1)}`;
+    document.getElementById('best-tile').href = link('fillup.html');
+    document.getElementById('in28').textContent = `${city.forecast[27].mid.toFixed(1)} ¢/L`;
     document.getElementById('data-date').textContent = fmt.date(city.data_end, { month: 'long', day: 'numeric', year: 'numeric' });
     if (city.holdout) {
         const m7 = city.holdout.mae[7], p7 = city.holdout.persistence_mae[7];
@@ -149,27 +217,22 @@ const DRIVER_LABELS = {
     }
     document.getElementById('prob7').textContent = fmt.pct(city.forecast[6].prob_up);
 
-    // Signal banner
+    // Signal verdict
     const s = city.signal;
-    const sig = {
-        fill_now: ['⬆️', tr('Prices expected to rise — fill up soon', 'Hausse prévue — faites le plein bientôt')],
-        wait:     ['⬇️', tr('Prices expected to drop — consider waiting', 'Baisse prévue — attendez si possible')],
-        steady:   ['➡️', tr('Prices expected to hold steady', 'Prix stables prévus')],
+    document.getElementById('signal-title').textContent = {
+        fill_now: tr('⬆ Fill up soon', '⬆ Faites le plein bientôt'),
+        wait:     tr('⬇ Consider waiting', '⬇ Attendez si possible'),
+        steady:   tr('➡ Holding steady', '➡ Prix stables'),
     }[s.kind];
-    const box = document.getElementById('signal');
-    box.classList.add(s.kind);
-    document.getElementById('signal-icon').textContent = sig[0];
-    document.getElementById('signal-title').textContent = sig[1];
     document.getElementById('signal-text').textContent = tr(
-        `Average forecast over the next 3 days: ${fmt.signed(s.change_3d)} ¢/L vs the latest price.`,
-        `Prévision moyenne sur les 3 prochains jours : ${fmt.signed(s.change_3d)} ¢/L par rapport au dernier prix.`);
-    box.hidden = false;
+        `${fmt.signed(s.change_3d)} ¢/L expected over the next 3 days`,
+        `${fmt.signed(s.change_3d)} ¢/L prévus sur les 3 prochains jours`);
 
     // Forecast chart, per product
     const hist = city.historical.slice(-60);
     const labels = [...hist.map(h => h.date), ...city.forecast.map(f => f.date)];
     const pad = n => Array(n).fill(null);
-    let chart = null;
+    let chart = null, current = { today: city.today_price, forecast: city.forecast }, scrub = null;
     productToggle(document.getElementById('product-toggle'), city, product => {
         const { today, forecast } = productForecast(city, product);
         const offset = today - city.today_price;           // derived products follow regular's history shape
@@ -179,20 +242,51 @@ const DRIVER_LABELS = {
         const join = v => [...pad(nH - 1), today, ...v];
         if (chart) chart.destroy();
         chart = bandChart(document.getElementById('forecastChart'), labels, [
-            { label: tr('Actual price', 'Prix réel'), data: [...histVals, ...pad(forecast.length)], color: '#2c5f8a' },
-            { label: tr('Forecast', 'Prévision'), data: join(forecast.map(f => f.mid)), color: '#e07b39', dash: [6, 3],
-              band: [join(forecast.map(f => f.low)), join(forecast.map(f => f.high))], bandColor: 'rgba(224,123,57,0.14)' },
+            { label: tr('Actual price', 'Prix réel'), data: [...histVals, ...pad(forecast.length)], role: 'actual' },
+            { label: tr('Forecast', 'Prévision'), data: join(forecast.map(f => f.mid)), role: 'forecast', dash: [6, 3],
+              band: [join(forecast.map(f => f.low)), join(forecast.map(f => f.high))] },
         ]);
         const last = forecast[forecast.length - 1];
         describeChart(document.getElementById('forecastChart'), tr(
             `${PRODUCT_NAMES[product][0]} price forecast for ${city.name}: ${today.toFixed(1)} ¢/L now, ${forecast[6].mid.toFixed(1)} in 7 days (range ${forecast[6].low.toFixed(1)}–${forecast[6].high.toFixed(1)}), ${last.mid.toFixed(1)} in 4 weeks (range ${last.low.toFixed(1)}–${last.high.toFixed(1)}).`,
             `Prévision du prix (${PRODUCT_NAMES[product][1].toLowerCase()}) pour ${city.name} : ${today.toFixed(1)} ¢/L maintenant, ${forecast[6].mid.toFixed(1)} dans 7 jours (${forecast[6].low.toFixed(1)}–${forecast[6].high.toFixed(1)}), ${last.mid.toFixed(1)} dans 4 semaines (${last.low.toFixed(1)}–${last.high.toFixed(1)}).`));
-        document.getElementById('today-price').textContent = fmt.cents(today);
+        countUp(document.getElementById('today-price'), today, v => v.toFixed(1));
+        document.getElementById('product-pill').textContent = PRODUCT_NAMES[product][LANG === 'fr' ? 1 : 0];
+        current = { today, forecast };
+        if (scrub) scrub();
         document.getElementById('chart-sub').textContent = product === 'regular'
             ? tr('The shaded band is where the price landed 80% of the time in out-of-sample testing.', 'La bande ombrée correspond à l\'endroit où le prix s\'est retrouvé 80 % du temps lors des tests hors échantillon.')
             : tr(`${PRODUCT_NAMES[product][0]} follows regular gasoline's expected move from today's ${fmt.signed(offset)} ¢/L gap.`,
                  `Le ${PRODUCT_NAMES[product][1].toLowerCase()} suit la variation prévue de l'ordinaire à partir de l'écart actuel de ${fmt.signed(offset)} ¢/L.`);
     });
+    // Day scrubber: read any day's forecast; a marker follows on the chart
+    const range = document.getElementById('scrub');
+    scrub = () => {
+        const h = +range.value, f = current.forecast[h - 1];
+        document.getElementById('scrub-date').textContent = fmt.date(f.date, { weekday: 'long', month: 'short', day: 'numeric' });
+        document.getElementById('scrub-mid').textContent = `${f.mid.toFixed(1)} ¢/L`;
+        document.getElementById('scrub-range').textContent = tr(`80% range ${f.low.toFixed(1)}–${f.high.toFixed(1)}`, `fourchette 80 % ${f.low.toFixed(1)}–${f.high.toFixed(1)}`);
+        const pu = (city.forecast[h - 1] || {}).prob_up;
+        document.getElementById('scrub-odds').textContent = pu == null ? '' : tr(`${fmt.pct(pu)} chance higher than today`, `${fmt.pct(pu)} de probabilité de hausse`);
+        range.setAttribute('aria-valuetext', `${fmt.date(f.date)}: ${f.mid.toFixed(1)} ¢/L`);
+        if (chart) { chart.$marker = hist.length - 1 + h; chart.update('none'); }
+    };
+    range.addEventListener('input', scrub);
+    scrub();
+
+    // Nearby cities
+    const me = index.cities.find(c => c.slug === CITY);
+    const near = index.cities.filter(c => c.slug !== CITY).map(c => ({ c, d: distanceKm(me, c) })).sort((a, b) => a.d - b.d).slice(0, 8);
+    document.getElementById('nearby-sub').textContent = tr(`Today's price vs ${me.name}`, `Prix du jour par rapport à ${me.name}`);
+    document.getElementById('nearby-map').href = link('map.html');
+    document.getElementById('nearby').innerHTML = near.map(({ c, d }) => {
+        const diff = c.today_price - me.today_price;
+        return `<a href="${link('index.html', { city: c.slug })}">
+            <div class="n-name">${esc(c.name)}</div><div class="n-dist">${Math.round(d)} km · ${c.province}</div>
+            <div class="n-price">${c.today_price.toFixed(1)}¢</div>
+            <div class="n-diff ${diff < -0.5 ? 'better' : diff > 0.5 ? 'worse' : 'muted'}">${diff < -0.5 ? tr(`${Math.abs(diff).toFixed(1)}¢ cheaper`, `${Math.abs(diff).toFixed(1)}¢ de moins`) : diff > 0.5 ? tr(`${diff.toFixed(1)}¢ pricier`, `${diff.toFixed(1)}¢ de plus`) : tr('about the same', 'à peu près pareil')}</div></a>`;
+    }).join('');
+
     const f7 = city.forecast[6], f28 = city.forecast[27];
     document.getElementById('prob-line').textContent = tr(
         `${fmt.pct(f7.prob_up)} chance the price is higher on ${fmt.date(f7.date, { weekday: 'long', month: 'short', day: 'numeric' })} than today, and ${fmt.pct(f28.prob_up)} by ${fmt.date(f28.date)}.`,
@@ -221,15 +315,18 @@ const DRIVER_LABELS = {
     exToggle.addEventListener('click', e => { const b = e.target.closest('button'); if (b) renderDrivers(b.dataset.h); });
     renderDrivers(hs.includes('14') ? '14' : hs[0]);
     const g = city.margin_gauge;
+    const pctl = g.percentile >= 0.995 ? tr('the highest in a year', 'du jamais vu en un an')
+        : g.percentile <= 0.005 ? tr('the lowest in a year', 'le plus bas en un an')
+        : tr(`higher than ${Math.round(g.percentile * 100)}% of the past year`, `plus que ${Math.round(g.percentile * 100)} % de l'année passée`);
     document.getElementById('margin-note').innerHTML = tr(
-        `Stations currently charge ${g.margin.toFixed(1)} ¢/L over wholesale vs a usual ${g.normal.toFixed(1)} ¢/L (higher than ${Math.round(g.percentile * 100)}% of the past year). <a href="${link('breakdown.html')}">See what's in the price →</a>`,
-        `Les stations prennent actuellement ${g.margin.toFixed(1)} ¢/L au-dessus du prix de gros, contre ${g.normal.toFixed(1)} ¢/L habituellement (plus que ${Math.round(g.percentile * 100)} % de l'année passée). <a href="${link('breakdown.html')}">Voir les composantes du prix →</a>`);
+        `Stations currently charge ${g.margin.toFixed(1)} ¢/L over wholesale vs a usual ${g.normal.toFixed(1)} ¢/L (${pctl}). <a href="${link('breakdown.html')}">See what's in the price →</a>`,
+        `Les stations prennent actuellement ${g.margin.toFixed(1)} ¢/L au-dessus du prix de gros, contre ${g.normal.toFixed(1)} ¢/L habituellement (${pctl}). <a href="${link('breakdown.html')}">Voir les composantes du prix →</a>`);
 
     // Scenarios
     const scenLabels = city.forecast.map(f => f.date);
     const scenChart = bandChart(document.getElementById('scenarioChart'), scenLabels, [
-        { label: tr('Current forecast', 'Prévision actuelle'), data: city.forecast.map(f => f.mid), color: '#e07b39', dash: [6, 3] },
-        { label: tr('With shock', 'Avec le choc'), data: city.forecast.map(f => f.mid), color: '#2c5f8a' },
+        { label: tr('Current forecast', 'Prévision actuelle'), data: city.forecast.map(f => f.mid), role: 'forecast', dash: [6, 3] },
+        { label: tr('With shock', 'Avec le choc'), data: city.forecast.map(f => f.mid), role: 'actual' },
     ]);
     const shock = document.getElementById('shock');
     function renderShock() {
