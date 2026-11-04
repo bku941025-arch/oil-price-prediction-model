@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-en="Road Trip Planner — PumpCast" data-fr="Planificateur de voyage — PumpCast">Road Trip Planner — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <meta name="theme-color" content="#2c5f8a">
+    <meta name="theme-color" content="#2b59c3">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="assets/style.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -126,7 +126,7 @@ function along(a, b, p) {
                 <td>${s.day === 0 ? tr('Today', "Aujourd'hui") : fmt.date(new Date(Date.now() + s.day * 864e5).toISOString().slice(0, 10), { weekday: 'short', month: 'short', day: 'numeric' })}</td>
                 <td class="num ${s === cheapest ? 'better' : s === priciest ? 'worse' : ''}">${s.price.toFixed(1)}</td></tr>`).join('') + '</tbody>';
         layer.clearLayers();
-        L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: '#2c5f8a', weight: 3, dashArray: '6 6' }).addTo(layer);
+        L.polyline([[a.lat, a.lon], [b.lat, b.lon]], { color: themeColor('brand'), weight: 3, dashArray: '6 6' }).addTo(layer);
         stops.forEach(s => {
             const color = s === cheapest ? '#2a8a5a' : s === priciest ? '#d0603a' : '#7a8a9a';
             L.marker([s.c.lat, s.c.lon], { icon: L.divIcon({ className: '', html: `<span class="price-pin" style="background:${color}">${s.price.toFixed(1)}</span>`, iconSize: null }), title: s.c.name }).addTo(layer);

@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-en="Price History — PumpCast" data-fr="Historique des prix — PumpCast">Price History — PumpCast</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <meta name="theme-color" content="#2c5f8a">
+    <meta name="theme-color" content="#2b59c3">
     <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="assets/app.js"></script>
@@ -68,10 +68,10 @@ const eventLines = {
         const { ctx, chartArea, scales: { x } } = chart;
         const labels = chart.data.labels;
         ctx.save();
-        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.strokeStyle = themeColor('line-2');
         ctx.setLineDash([3, 3]);
-        ctx.fillStyle = '#666';
-        ctx.font = '600 10px DM Sans';
+        ctx.fillStyle = themeColor('muted');
+        ctx.font = "600 10px 'Plus Jakarta Sans', sans-serif";
         EVENTS.forEach((e, n) => {
             const i = labels.indexOf(e[0]);
             if (i < 0) return;
@@ -103,10 +103,10 @@ const eventLines = {
         const cutoff = months ? new Date(Date.now() - months * 30.4 * 864e5).toISOString().slice(0, 10) : '';
         const rows = main.filter(r => r[0] >= cutoff);
         const labels = rows.map(r => r[0]);
-        const sets = [{ label: name, data: rows.map(r => r[1]), color: '#2c5f8a', width: 1.5, spanGaps: true }];
+        const sets = [{ label: name, data: rows.map(r => r[1]), role: 'actual', width: 1.5, spanGaps: true }];
         if (other) {
             const m = Object.fromEntries(series(other.hist));
-            sets.push({ label: other.name, data: labels.map(d => m[d] ?? null), color: '#e07b39', width: 1.5, spanGaps: true });
+            sets.push({ label: other.name, data: labels.map(d => m[d] ?? null), role: 'forecast', width: 1.5, spanGaps: true });
         }
         if (chart) chart.destroy();
         Chart.register(eventLines);
@@ -141,7 +141,7 @@ const eventLines = {
     const names = days.map(d => new Date(2024, 0, 1 + d).toLocaleDateString(LANG === 'fr' ? 'fr-CA' : 'en-CA', { weekday: 'long' }));
     new Chart(document.getElementById('weekdayChart').getContext('2d'), {
         type: 'bar',
-        data: { labels: names, datasets: [{ data: days.map(d => wd[d].mean), backgroundColor: days.map(d => wd[d].mean < 0 ? '#3aaa6e' : '#e07b39'), borderRadius: 4 }] },
+        data: { labels: names, datasets: [{ data: days.map(d => wd[d].mean), backgroundColor: days.map(d => wd[d].mean < 0 ? themeColor('green') : themeColor('orange')), borderRadius: 4 }] },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${fmt.signed(c.parsed.y)} ¢/L (±${(2 * wd[days[c.dataIndex]].se).toFixed(2)})` } } },

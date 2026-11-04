@@ -30,6 +30,7 @@ Forecasts retail gasoline prices up to 4 weeks ahead for 77 Canadian cities (eve
 - **Model card**: version, training window, range reliability, CRPS and known limitations
 
 **Everywhere**
+- Light and dark themes (follows your system), a searchable city picker with "use my location" (press `/` anywhere), a phone tab bar, and an interactive forecast hero with a day-by-day scrubber
 - English and French, mobile-friendly, accessible (skip link, chart text alternatives, AA contrast), installable as an app that works offline
 - Public JSON API, CSV export, RSS feeds, an embeddable widget, and link previews for every city
 - Optional push alerts (ntfy) and daily Bluesky / Mastodon posts
